@@ -2,8 +2,10 @@ name: Pickle League weekly
 
 on:
   schedule:
-    # Tuesday 08:00 UTC — late enough that bonus points have settled
-    - cron: '0 8 * * 2'
+    # Daily 08:00 UTC — late enough that bonus points have settled;
+    # the finished/lastReportedGw guards in index.js keep this to one send
+    # per gameweek even though the cron now fires every day.
+    - cron: '0 8 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
