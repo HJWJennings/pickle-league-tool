@@ -22,11 +22,15 @@ jobs:
   summary:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # v5 runs on Node 24. v4 targets Node 20, which is removed from
+      # runners on 16 Sep 2026 — mid-season for us.
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      # No setup-node step: ubuntu-latest ships with Node preinstalled and
+      # this project has no dependencies. One less action, one less thing
+      # to deprecate.
+      - name: Show Node version
+        run: node --version
 
       - name: Build weekly summary
         env:
