@@ -1,35 +1,77 @@
-name: Test Telegram
-
-# Throwaway. Run it once, confirm the message arrives on your phone,
-# then delete this file.
+name: Pickle League weekly
 
 on:
+  schedule:
+    # Tuesday 08:00 UTC — late enough that bonus points have settled
+    - cron: '0 8 * * 2'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print only — write nothing, send nothing'
+        type: boolean
+        default: false
+      force:
+        description: 'Send even if unsettled or already reported'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
 
 jobs:
-  test:
+  summary:
     runs-on: ubuntu-latest
     steps:
-      - name: Send a test message
+      # v5 runs on Node 24. v4 targets Node 20, which is removed from
+      # runners on 16 Sep 2026 — mid-season for us.
+      - uses: actions/checkout@v5
+
+      # No setup-node step: ubuntu-latest ships with Node preinstalled and
+      # this project has no dependencies.
+      - name: Build weekly summary
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
+          FLAGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then FLAGS="$FLAGS --dry-run"; fi
+          if [ "${{ inputs.force }}"   = "true" ]; then FLAGS="$FLAGS --force";   fi
+          node index.js $FLAGS
+
+      - name: Commit updated state
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          git config user.name  'pickle-bot'
+          git config user.email 'pickle-bot@users.noreply.github.com'
+          if ! git diff --quiet state.json; then
+            git add state.json
+            git commit -m "GW data update"
+            git push
+          else
+            echo "No state change."
+          fi
+
+      # Don't rely on GitHub's email. Telegram is already proven to reach
+      # your phone, so failures go down the same pipe as the summary.
+      - name: Alert on failure
+        if: ${{ failure() }}
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          echo "Failure alert step reached."
+
           if [ -z "$TELEGRAM_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "One or both secrets are missing or empty."
+            echo "Telegram secrets missing — cannot alert."
             exit 1
           fi
+
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TEXT="🚨 Pickle League run FAILED. The GW summary did not send. Logs: ${RUN_URL}"
 
           RESPONSE=$(curl -s -X POST \
             "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-            -H "Content-Type: application/json" \
-            -d "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":\"🥒 Pickle League plumbing works. *Bold* should show as asterisks here, and render as bold when pasted into WhatsApp.\"}")
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${TEXT}")
 
-          echo "$RESPONSE"
-
-          if echo "$RESPONSE" | grep -q '"ok":true'; then
-            echo "Sent. Check your phone."
-          else
-            echo "Failed — see the response above."
-            exit 1
-          fi
+          echo "Telegram response: $RESPONSE"
