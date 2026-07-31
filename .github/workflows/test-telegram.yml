@@ -1,0 +1,35 @@
+name: Test Telegram
+
+# Throwaway. Run it once, confirm the message arrives on your phone,
+# then delete this file.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send a test message
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TELEGRAM_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "One or both secrets are missing or empty."
+            exit 1
+          fi
+
+          RESPONSE=$(curl -s -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":\"🥒 Pickle League plumbing works. *Bold* should show as asterisks here, and render as bold when pasted into WhatsApp.\"}")
+
+          echo "$RESPONSE"
+
+          if echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "Sent. Check your phone."
+          else
+            echo "Failed — see the response above."
+            exit 1
+          fi
