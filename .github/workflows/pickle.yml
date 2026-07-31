@@ -1,0 +1,52 @@
+name: Pickle League weekly
+
+on:
+  schedule:
+    # Tuesday 08:00 UTC — late enough that bonus points have settled
+    - cron: '0 8 * * 2'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print only — write nothing, send nothing'
+        type: boolean
+        default: false
+      force:
+        description: 'Send even if unsettled or already reported'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  summary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build weekly summary
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then FLAGS="$FLAGS --dry-run"; fi
+          if [ "${{ inputs.force }}"   = "true" ]; then FLAGS="$FLAGS --force";   fi
+          node index.js $FLAGS
+
+      - name: Commit updated state
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          git config user.name  'pickle-bot'
+          git config user.email 'pickle-bot@users.noreply.github.com'
+          if ! git diff --quiet state.json; then
+            git add state.json
+            git commit -m "GW data update"
+            git push
+          else
+            echo "No state change."
+          fi
