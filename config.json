@@ -1,0 +1,33 @@
+{
+  "leagueId": 0,
+
+  "expectedManagers": 10,
+
+  "pickle": {
+    "entryId": 0,
+    "label": "SET ME AFTER THE DRAFT VOTE"
+  },
+
+  "fine": {
+    "amount": 1,
+    "floatStart": 10,
+    "lowBalanceWarning": 3
+  },
+
+  "motm": {
+    "tieRule": "split"
+  },
+
+  "months": [
+    { "name": "August",   "from": 1,  "to": 3 },
+    { "name": "September", "from": 4,  "to": 6 },
+    { "name": "October",  "from": 7,  "to": 9 },
+    { "name": "November", "from": 10, "to": 13 },
+    { "name": "December", "from": 14, "to": 19 },
+    { "name": "January",  "from": 20, "to": 23 },
+    { "name": "February", "from": 24, "to": 27 },
+    { "name": "March",    "from": 28, "to": 30 },
+    { "name": "April",    "from": 31, "to": 34 },
+    { "name": "May",      "from": 35, "to": 38 }
+  ]
+}

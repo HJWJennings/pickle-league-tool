@@ -1,0 +1,12 @@
+{
+  "name": "pickle-league",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "node index.js",
+    "dry": "node index.js --dry-run",
+    "backfill": "node index.js --backfill"
+  },
+  "engines": { "node": ">=20" }
+}
