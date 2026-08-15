@@ -6,7 +6,9 @@
   "scripts": {
     "run": "node index.js",
     "dry": "node index.js --dry-run",
-    "backfill": "node index.js --backfill"
+    "backfill": "node index.js --backfill",
+    "test": "node --test",
+    "preview": "node test/preview.js"
   },
   "engines": { "node": ">=20" }
 }
