@@ -71,7 +71,7 @@ export function buildMessage(state, config, gw) {
       );
     } else {
       out.push(b(`${month.name} race (GW${month.from}–${month.to})`));
-      table.slice(0, 3).forEach((r, idx) => {
+      table.forEach((r, idx) => {
         out.push(`${idx + 1}. ${name(r.entryId)} — ${r.points}`);
       });
     }
