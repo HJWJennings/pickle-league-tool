@@ -7,7 +7,7 @@
     "run": "node index.js",
     "dry": "node index.js --dry-run",
     "backfill": "node index.js --backfill",
-    "test": "node --test",
+    "test": "node --test test/*.test.js",
     "preview": "node test/preview.js"
   },
   "engines": { "node": ">=20" }
