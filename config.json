@@ -1,11 +1,11 @@
 {
   "leagueId": 812,
 
-  "expectedManagers": 10,
+  "expectedManagers": 9,
 
   "pickle": {
-    "entryId": 0,
-    "label": "SET ME AFTER THE DRAFT VOTE"
+    "entryId": 2105,
+    "label": "Cormac"
   },
 
   "fine": {
@@ -19,15 +19,15 @@
   },
 
   "months": [
-    { "name": "August",   "from": 1,  "to": 3 },
-    { "name": "September", "from": 4,  "to": 6 },
-    { "name": "October",  "from": 7,  "to": 9 },
-    { "name": "November", "from": 10, "to": 13 },
-    { "name": "December", "from": 14, "to": 19 },
-    { "name": "January",  "from": 20, "to": 23 },
+    { "name": "August",   "from": 1,  "to": 2 },
+    { "name": "September", "from": 3,  "to": 5 },
+    { "name": "October",  "from": 6,  "to": 9 },
+    { "name": "November", "from": 10, "to": 12 },
+    { "name": "December", "from": 13, "to": 18 },
+    { "name": "January",  "from": 19, "to": 23 },
     { "name": "February", "from": 24, "to": 27 },
     { "name": "March",    "from": 28, "to": 30 },
-    { "name": "April",    "from": 31, "to": 34 },
-    { "name": "May",      "from": 35, "to": 38 }
+    { "name": "April",    "from": 31, "to": 33 },
+    { "name": "May",      "from": 34, "to": 38 }
   ]
 }
