@@ -9,6 +9,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   recordedWeeks,
@@ -18,10 +19,18 @@ import {
   monthFor,
   monthTable,
   managerOfTheMonth,
-  weeklyStats
+  weeklyStats,
+  validatePickleHistory,
+  pickleEntryIdForGw,
+  validateMotmMonths
 } from '../src/pickle.js';
 
+// The real config, so the coverage/boundary tests below check what actually
+// ships — not a fixture that could silently drift from it.
+const config = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
+
 const PICKLE = 3; // entry id of the pickle in these fixtures
+const HISTORY = [{ fromGw: 1, entryId: PICKLE }]; // single-entry history wrapping PICKLE
 
 /** Small helper so fixtures stay readable. */
 const state = (gameweeks) => ({ season: 'test', managers: {}, gameweeks });
@@ -85,20 +94,20 @@ describe('fine ledger', () => {
   });
 
   test('accumulates across gameweeks', () => {
-    const ledger = fineLedger(seasonSoFar, PICKLE, 1);
+    const ledger = fineLedger(seasonSoFar, HISTORY, 1);
     assert.equal(ledger.get(1), 1, 'entry 1 fined once (GW2)');
     assert.equal(ledger.get(2), 1, 'entry 2 fined once (GW1)');
   });
 
   test('IDEMPOTENT: re-recording a gameweek does not double-fine', () => {
-    const before = fineLedger(seasonSoFar, PICKLE, 1);
+    const before = fineLedger(seasonSoFar, HISTORY, 1);
 
     // Simulate the weekly run overwriting a gameweek it already has —
     // exactly what happens on a re-run or a corrected score.
     const rerun = state({ ...seasonSoFar.gameweeks });
     rerun.gameweeks['1'] = { 1: 60, 2: 40, 3: 50 };
 
-    const after = fineLedger(rerun, PICKLE, 1);
+    const after = fineLedger(rerun, HISTORY, 1);
     assert.deepEqual([...after.entries()].sort(), [...before.entries()].sort());
   });
 
@@ -106,22 +115,85 @@ describe('fine ledger', () => {
     const corrected = state({ ...seasonSoFar.gameweeks });
     corrected.gameweeks['1'] = { 1: 60, 2: 55, 3: 50 }; // entry 2 now above
 
-    const ledger = fineLedger(corrected, PICKLE, 1);
+    const ledger = fineLedger(corrected, HISTORY, 1);
     assert.equal(ledger.get(2), undefined, 'entry 2 should no longer be fined');
+  });
+
+  test('a pickle change mid-season only affects gameweeks from its fromGw onward', () => {
+    // GW1-2 fined against entry PICKLE (3); GW3 onward fined against entry 9.
+    const s = state({
+      1: { 1: 60, 2: 40, 3: 50 }, // vs PICKLE=3: entry 2 fined
+      2: { 1: 30, 2: 70, 3: 50 }, // vs PICKLE=3: entry 1 fined
+      3: { 1: 60, 2: 40, 9: 50 } // vs entry 9 (new pickle): entry 2 fined
+    });
+    const history = [
+      { fromGw: 1, entryId: 3 },
+      { fromGw: 3, entryId: 9 }
+    ];
+    const ledger = fineLedger(s, history, 1);
+    assert.equal(ledger.get(1), 1, 'entry 1 fined once, in GW2 under the old pickle');
+    assert.equal(ledger.get(2), 2, 'entry 2 fined in GW1 (old pickle) and GW3 (new pickle)');
+  });
+});
+
+describe('pickle history', () => {
+  test('resolves the only entry for any gameweek from its fromGw onward', () => {
+    assert.equal(pickleEntryIdForGw(HISTORY, 1), PICKLE);
+    assert.equal(pickleEntryIdForGw(HISTORY, 38), PICKLE);
+  });
+
+  test('picks the entry with the highest fromGw <= gw', () => {
+    const history = [
+      { fromGw: 1, entryId: 3 },
+      { fromGw: 10, entryId: 9 },
+      { fromGw: 25, entryId: 5 }
+    ];
+    assert.equal(pickleEntryIdForGw(history, 1), 3);
+    assert.equal(pickleEntryIdForGw(history, 9), 3);
+    assert.equal(pickleEntryIdForGw(history, 10), 9);
+    assert.equal(pickleEntryIdForGw(history, 24), 9);
+    assert.equal(pickleEntryIdForGw(history, 25), 5);
+    assert.equal(pickleEntryIdForGw(history, 38), 5);
+  });
+
+  test('throws for a gameweek before the earliest entry', () => {
+    const history = [{ fromGw: 5, entryId: 3 }];
+    assert.throws(() => pickleEntryIdForGw(history, 1));
+  });
+
+  test('throws on an empty history', () => {
+    assert.throws(() => validatePickleHistory([]));
+    assert.throws(() => validatePickleHistory(undefined));
+  });
+
+  test('throws on unsorted fromGw', () => {
+    const history = [
+      { fromGw: 10, entryId: 3 },
+      { fromGw: 1, entryId: 9 }
+    ];
+    assert.throws(() => validatePickleHistory(history));
+  });
+
+  test('throws on duplicate fromGw', () => {
+    const history = [
+      { fromGw: 1, entryId: 3 },
+      { fromGw: 1, entryId: 9 }
+    ];
+    assert.throws(() => validatePickleHistory(history));
   });
 });
 
 describe('months', () => {
   const months = [
-    { name: 'August', from: 1, to: 2 },
-    { name: 'September', from: 3, to: 5 }
+    { label: 'August', fromGw: 1, toGw: 2 },
+    { label: 'September', fromGw: 3, toGw: 5 }
   ];
 
   test('maps a gameweek to its month, inclusive at both edges', () => {
-    assert.equal(monthFor(months, 1).name, 'August');
-    assert.equal(monthFor(months, 2).name, 'August');
-    assert.equal(monthFor(months, 3).name, 'September');
-    assert.equal(monthFor(months, 5).name, 'September');
+    assert.equal(monthFor(months, 1).label, 'August');
+    assert.equal(monthFor(months, 2).label, 'August');
+    assert.equal(monthFor(months, 3).label, 'September');
+    assert.equal(monthFor(months, 5).label, 'September');
   });
 
   test('returns null for a gameweek outside every configured range', () => {
@@ -154,7 +226,7 @@ describe('months', () => {
 });
 
 describe('manager of the month', () => {
-  const months = [{ name: 'August', from: 1, to: 2 }];
+  const months = [{ label: 'August', fromGw: 1, toGw: 2 }];
 
   test('single winner', () => {
     const s = state({ 1: { 1: 50, 2: 40 }, 2: { 1: 50, 2: 40 } });
@@ -174,6 +246,54 @@ describe('manager of the month', () => {
     const s = state({ 1: { 1: 45, 2: 45, 3: 45 } , 2: { 1: 45, 2: 45, 3: 45 } });
     const motm = managerOfTheMonth(s, months[0]);
     assert.equal(motm.winners.length, 3);
+  });
+});
+
+describe('motm months validation (config.motmMonths)', () => {
+  test('the real config covers exactly GW1-38 with no gaps or overlaps', () => {
+    assert.doesNotThrow(() => validateMotmMonths(config.motmMonths));
+  });
+
+  test('boundary: GW2 is August, GW3 is September', () => {
+    assert.equal(monthFor(config.motmMonths, 2).label, 'August');
+    assert.equal(monthFor(config.motmMonths, 3).label, 'September');
+  });
+
+  test('boundary: GW18 is December, GW19 is January — no special handling at the GW20 redraft', () => {
+    assert.equal(monthFor(config.motmMonths, 18).label, 'December');
+    assert.equal(monthFor(config.motmMonths, 19).label, 'January');
+    assert.equal(monthFor(config.motmMonths, 20).label, 'January');
+  });
+
+  test('throws on an empty array', () => {
+    assert.throws(() => validateMotmMonths([]));
+    assert.throws(() => validateMotmMonths(undefined));
+  });
+
+  test('throws on a gap between months', () => {
+    const months = [
+      { label: 'August', fromGw: 1, toGw: 2 },
+      { label: 'October', fromGw: 4, toGw: 5 } // GW3 missing
+    ];
+    assert.throws(() => validateMotmMonths(months));
+  });
+
+  test('throws on overlapping months', () => {
+    const months = [
+      { label: 'August', fromGw: 1, toGw: 3 },
+      { label: 'September', fromGw: 3, toGw: 5 } // GW3 double-counted
+    ];
+    assert.throws(() => validateMotmMonths(months));
+  });
+
+  test('throws when coverage falls short of GW38', () => {
+    const months = [{ label: 'August', fromGw: 1, toGw: 30 }];
+    assert.throws(() => validateMotmMonths(months));
+  });
+
+  test('throws when coverage runs past GW38', () => {
+    const months = [{ label: 'August', fromGw: 1, toGw: 40 }];
+    assert.throws(() => validateMotmMonths(months));
   });
 });
 

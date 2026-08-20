@@ -1,7 +1,12 @@
 import { readFile, writeFile, appendFile } from 'node:fs/promises';
 import { getGameState, getLeague, getEntryHistory } from './src/fpl.js';
 import { buildMessage } from './src/message.js';
-import { missingWeeks } from './src/pickle.js';
+import {
+  missingWeeks,
+  validatePickleHistory,
+  pickleEntryIdForGw,
+  validateMotmMonths
+} from './src/pickle.js';
 import { ledgerCsv } from './src/ledger.js';
 
 const args = new Set(process.argv.slice(2));
@@ -24,6 +29,7 @@ async function writeState(state, config) {
 function sanityCheck(league, config, gw) {
   const problems = [];
   const scores = league.scores;
+  const pickleEntryId = pickleEntryIdForGw(config.pickle.history, gw);
 
   if (config.expectedManagers && scores.length !== config.expectedManagers) {
     problems.push(
@@ -48,10 +54,10 @@ function sanityCheck(league, config, gw) {
     );
   }
 
-  if (!scores.some((s) => s.entryId === config.pickle.entryId)) {
+  if (!scores.some((s) => s.entryId === pickleEntryId)) {
     problems.push(
-      `Pickle entryId ${config.pickle.entryId} is not in this league. ` +
-        `Entry IDs change every season — has it been updated?`
+      `Pickle entryId ${pickleEntryId} (resolved for GW${gw}) is not in this league. ` +
+        `Entry IDs change every season — has config.pickle.history been updated?`
     );
   }
 
@@ -64,9 +70,11 @@ async function main() {
   const config = await readJson('./config.json');
   const state = await readJson('./state.json');
 
-  if (!config.leagueId || !config.pickle.entryId) {
-    throw new Error('Set leagueId and pickle.entryId in config.json first.');
+  if (!config.leagueId) {
+    throw new Error('Set leagueId in config.json first.');
   }
+  validatePickleHistory(config.pickle.history);
+  validateMotmMonths(config.motmMonths);
 
   const game = await getGameState();
   const gw = game.currentEvent;

@@ -5,7 +5,8 @@ import {
   monthTable,
   managerOfTheMonth,
   weeklyStats,
-  missingWeeks
+  missingWeeks,
+  pickleEntryIdForGw
 } from './pickle.js';
 
 // WhatsApp markup: *bold*, _italic_, ~strike~
@@ -13,23 +14,30 @@ const b = (s) => `*${s}*`;
 const i = (s) => `_${s}_`;
 
 export function buildMessage(state, config, gw) {
-  const name = (entryId) => state.managers[String(entryId)]?.teamName ?? `#${entryId}`;
-  const who = (entryId) => state.managers[String(entryId)]?.manager ?? `#${entryId}`;
+  // Group-facing display only — "{teamName} - {managerName}", sourced from
+  // config.managers (hand-maintained), not state.managers (the API scrape
+  // ledger.csv still uses). Falls back to a bare entryId if a manager isn't
+  // in config.managers yet, e.g. a TODO row not filled in.
+  const managersByEntryId = new Map(config.managers.map((m) => [m.entryId, m]));
+  const display = (entryId) => {
+    const m = managersByEntryId.get(Number(entryId));
+    return m ? `${m.teamName} - ${m.managerName}` : `#${entryId}`;
+  };
 
   const stats = weeklyStats(state, gw);
   if (!stats) return `No data recorded for GW${gw}.`;
 
-  const pickleId = config.pickle.entryId;
-  const { amount, floatStart, lowBalanceWarning } = config.fine;
+  const { amount, floatStart, entryFee, lowBalanceWarning } = config.fine;
+  const pickleId = pickleEntryIdForGw(config.pickle.history, gw);
   const { picklePoints, fined, drew } = finesForWeek(state, gw, pickleId, amount);
-  const ledger = fineLedger(state, pickleId, amount);
+  const ledger = fineLedger(state, config.pickle.history, amount);
 
   const out = [];
   out.push(`${b(`🥒 PICKLE LEAGUE — GW${gw}`)}`);
   out.push('');
 
   // --- The pickle line -------------------------------------------------
-  out.push(`${b('The Pickle')} (${name(pickleId)}) scored ${b(picklePoints)}`);
+  out.push(`${b('The Pickle')} (${display(pickleId)}) scored ${b(picklePoints)}`);
 
   if (fined.length === 0) {
     out.push(i('Nobody finished below the pickle. Clean sheet.'));
@@ -37,42 +45,42 @@ export function buildMessage(state, config, gw) {
     out.push('');
     out.push(b(`Fines (£${amount} each)`));
     for (const f of [...fined].sort((a, x) => a.points - x.points)) {
-      out.push(`• ${name(f.entryId)} — ${f.points} pts`);
+      out.push(`• ${display(f.entryId)} — ${f.points} pts`);
     }
   }
 
   if (drew.length) {
-    out.push(i(`Level with the pickle, no fine: ${drew.map((d) => name(d.entryId)).join(', ')}`));
+    out.push(i(`Level with the pickle, no fine: ${drew.map((d) => display(d.entryId)).join(', ')}`));
   }
 
   // --- Week's stats ----------------------------------------------------
   out.push('');
   out.push(b('This week'));
-  out.push(`🏆 Top: ${name(stats.top.entryId)} — ${stats.top.points}`);
-  out.push(`💩 Worst: ${name(stats.bottom.entryId)} — ${stats.bottom.points}`);
+  out.push(`🏆 Top: ${display(stats.top.entryId)} — ${stats.top.points}`);
+  out.push(`💩 Worst: ${display(stats.bottom.entryId)} — ${stats.bottom.points}`);
   out.push(`📊 League average: ${stats.average}`);
   if (stats.bestEver?.gw === gw) {
     out.push(i(`Best score of the season so far 🔥`));
   }
 
   // --- Month race ------------------------------------------------------
-  const month = monthFor(config.months, gw);
+  const month = monthFor(config.motmMonths, gw);
   if (month) {
     const { table, complete } = monthTable(state, month);
     out.push('');
     if (complete) {
       const motm = managerOfTheMonth(state, month);
-      const names = motm.winners.map(who).join(' & ');
-      out.push(b(`🏅 ${month.name} Manager of the Month`));
+      const names = motm.winners.map(display).join(' & ');
+      out.push(b(`🏅 ${month.label} Manager of the Month`));
       out.push(
         motm.shared
           ? `${names} — ${motm.points} pts each. ${i('Shared, prize splits.')}`
           : `${names} — ${motm.points} pts`
       );
     } else {
-      out.push(b(`${month.name} race (GW${month.from}–${month.to})`));
+      out.push(b(`${month.label} race (GW${month.fromGw}–${month.toGw})`));
       table.forEach((r, idx) => {
-        out.push(`${idx + 1}. ${name(r.entryId)} — ${r.points}`);
+        out.push(`${idx + 1}. ${display(r.entryId)} — ${r.points}`);
       });
     }
   }
@@ -81,23 +89,28 @@ export function buildMessage(state, config, gw) {
   out.push('');
   out.push(b('Season table'));
   stats.table.forEach((r, idx) => {
-    out.push(`${idx + 1}. ${name(r.entryId)} — ${r.points}`);
+    out.push(`${idx + 1}. ${display(r.entryId)} — ${r.points}`);
   });
 
-  // --- Float balances --------------------------------------------------
+  // --- Jar total & float balances ---------------------------------------
   out.push('');
-  out.push(b('Pickle jar float'));
+  out.push(b('Pickle jar'));
   const balances = stats.table
     .map((r) => ({ entryId: r.entryId, left: floatStart - (ledger.get(r.entryId) ?? 0) }))
     .filter((x) => x.entryId !== pickleId)
     .sort((a, x) => a.left - x.left);
 
-  const collected = [...ledger.values()].reduce((s, v) => s + v, 0);
-  out.push(`Total in the jar: £${collected}`);
+  // Jar starts at the entry pool (entryFee × every manager, pickle included)
+  // and grows £1 per fine — recomputed fresh from state.json every run, same
+  // as everything else derived. Not to be confused with the £10 float above,
+  // which is a separate per-manager figure.
+  const jarStart = entryFee * config.expectedManagers;
+  const finesCollected = [...ledger.values()].reduce((s, v) => s + v, 0);
+  out.push(`Total in the jar: £${jarStart + finesCollected}`);
 
   const low = balances.filter((x) => x.left <= lowBalanceWarning);
   if (low.length) {
-    out.push(i(`Running low: ${low.map((x) => `${name(x.entryId)} (£${x.left})`).join(', ')}`));
+    out.push(i(`Running low: ${low.map((x) => `${display(x.entryId)} (£${x.left})`).join(', ')}`));
   }
 
   // --- Admin warnings (for Harry, not the group) -----------------------

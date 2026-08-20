@@ -4,13 +4,27 @@
   "expectedManagers": 9,
 
   "pickle": {
-    "entryId": 2105,
-    "label": "Cormac"
+    "history": [
+      { "fromGw": 1, "entryId": 2105, "label": "Cormac" }
+    ]
   },
+
+  "managers": [
+    { "entryId": 2105, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -1, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -2, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -3, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -4, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -5, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -6, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -7, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -8, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" }
+  ],
 
   "fine": {
     "amount": 1,
     "floatStart": 10,
+    "entryFee": 20,
     "lowBalanceWarning": 3
   },
 
@@ -18,16 +32,16 @@
     "tieRule": "split"
   },
 
-  "months": [
-    { "name": "August",   "from": 1,  "to": 2 },
-    { "name": "September", "from": 3,  "to": 5 },
-    { "name": "October",  "from": 6,  "to": 9 },
-    { "name": "November", "from": 10, "to": 12 },
-    { "name": "December", "from": 13, "to": 18 },
-    { "name": "January",  "from": 19, "to": 23 },
-    { "name": "February", "from": 24, "to": 27 },
-    { "name": "March",    "from": 28, "to": 30 },
-    { "name": "April",    "from": 31, "to": 33 },
-    { "name": "May",      "from": 34, "to": 38 }
+  "motmMonths": [
+    { "label": "August",    "fromGw": 1,  "toGw": 2  },
+    { "label": "September", "fromGw": 3,  "toGw": 5  },
+    { "label": "October",   "fromGw": 6,  "toGw": 9  },
+    { "label": "November",  "fromGw": 10, "toGw": 12 },
+    { "label": "December",  "fromGw": 13, "toGw": 18 },
+    { "label": "January",   "fromGw": 19, "toGw": 23 },
+    { "label": "February",  "fromGw": 24, "toGw": 27 },
+    { "label": "March",     "fromGw": 28, "toGw": 30 },
+    { "label": "April",     "fromGw": 31, "toGw": 33 },
+    { "label": "May",       "fromGw": 34, "toGw": 38 }
   ]
 }

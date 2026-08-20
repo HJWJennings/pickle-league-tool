@@ -28,13 +28,23 @@ const ID = Object.fromEntries(MANAGERS.map((m, i) => [m, 101 + i]));
 const config = {
   leagueId: 999999,
   expectedManagers: MANAGERS.length,
-  pickle: { entryId: ID[PICKLE], label: PICKLE },
-  fine: { amount: 1, floatStart: 10, lowBalanceWarning: 3 },
+  pickle: { history: [{ fromGw: 1, entryId: ID[PICKLE], label: PICKLE }] },
+  // Placeholder display names — config.managers is what buildMessage reads
+  // for "{teamName} - {managerName}"; not real names, just enough to see the
+  // format render.
+  managers: MANAGERS.map((m) => ({
+    entryId: ID[m],
+    initials: m,
+    teamName: `${m} FC`,
+    managerName: `${m} Manager`
+  })),
+  fine: { amount: 1, floatStart: 10, entryFee: 20, lowBalanceWarning: 3 },
   motm: { tieRule: 'split' },
-  // Placeholder ranges — replace with your real ones before the season.
-  months: [
-    { name: 'August', from: 1, to: 3 },
-    { name: 'September', from: 4, to: 6 }
+  // Small placeholder ranges to fit this preview's synthetic 2-3 week
+  // scenarios — not the real season-long config.motmMonths.
+  motmMonths: [
+    { label: 'August', fromGw: 1, toGw: 3 },
+    { label: 'September', fromGw: 4, toGw: 6 }
   ]
 };
 

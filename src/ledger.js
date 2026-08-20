@@ -1,18 +1,23 @@
-import { recordedWeeks, finesForWeek } from './pickle.js';
+import { recordedWeeks, finesForWeek, pickleEntryIdForGw } from './pickle.js';
 
 /**
  * Row-per-manager-per-gameweek ledger for manually checking the fine maths.
  * Pure and derived fresh from state.gameweeks every call — same rule as
  * everything else in src/pickle.js, so it can never drift from state.json.
+ *
+ * The applicable pickle is resolved per gameweek via pickleEntryIdForGw, the
+ * same lookup src/message.js uses — so a pickle change never disagrees
+ * between the weekly message and this ledger, and never rewrites already
+ * -recorded gameweeks that came before the change.
  */
 export function ledgerRows(state, config) {
-  const pickleId = config.pickle.entryId;
   const { amount, floatStart } = config.fine;
   const balances = new Map();
 
   const rows = [];
   for (const gw of recordedWeeks(state)) {
     const week = state.gameweeks[String(gw)];
+    const pickleId = pickleEntryIdForGw(config.pickle.history, gw);
     const { picklePoints, fined } = finesForWeek(state, gw, pickleId, amount);
     const finedIds = new Set(fined.map((f) => f.entryId));
 
