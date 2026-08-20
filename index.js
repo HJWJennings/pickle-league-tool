@@ -7,7 +7,7 @@ import {
   getTransactions,
   getTrades
 } from './src/fpl.js';
-import { buildMessage, managerName } from './src/message.js';
+import { buildMessage, managerInitials } from './src/message.js';
 import {
   missingWeeks,
   validatePickleHistory,
@@ -199,7 +199,7 @@ async function runGameweekReport(config, state, game, gw) {
 async function runDraftTasks(config, state) {
   const now = new Date();
   const { events, elements } = await getBootstrap();
-  const label = managerName(config);
+  const label = managerInitials(config);
 
   /**
    * Unrecognized records are reported ONCE and then marked handled, keyed by
