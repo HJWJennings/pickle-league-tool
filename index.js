@@ -95,17 +95,23 @@ async function main() {
   const game = await getGameState();
   const gw = game.currentEvent;
 
-  // Off-season: no gameweek to report on, and no waivers/trades either.
-  if (gw == null) {
-    console.log('No current gameweek — off-season. Nothing to do.');
-    return;
-  }
-  console.log(`Current gameweek: ${gw} (finished: ${game.finished})`);
-
   // Three independent jobs on one hourly cron. The gameweek report keeps its
   // own guards and is untouched by the others; the draft tasks run whether or
   // not it decided to send, so its early exits can't suppress them.
-  await runGameweekReport(config, state, game, gw);
+  //
+  // No current gameweek means only that there's nothing to REPORT ON. It must
+  // not skip the draft tasks: a season's very first waiver deadline lands 24h
+  // before GW1's deadline, while current_event is still null, so returning
+  // here would make the opening waiver message of every season unsendable.
+  // runDraftTasks doesn't read current_event at all — it resolves its own
+  // gameweek from the deadline list, which is unambiguous year-round.
+  if (gw == null) {
+    console.log('No current gameweek — skipping the gameweek report.');
+  } else {
+    console.log(`Current gameweek: ${gw} (finished: ${game.finished})`);
+    await runGameweekReport(config, state, game, gw);
+  }
+
   await runDraftTasks(config, state);
 }
 

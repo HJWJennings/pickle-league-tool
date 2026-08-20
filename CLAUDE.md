@@ -379,7 +379,12 @@ beyond plain objects. To exercise `index.js`'s wiring without network, stub
 claim rendered, unrecognized record alerted exactly once) were verified.
 
 Off-season note: the Draft API returns no current gameweek outside the season,
-so a dry run will exit early rather than showing a message.
+so a dry run shows no weekly message. The draft tasks still run — deliberately.
+A season's first waiver deadline falls 24h before GW1's deadline, while
+`current_event` is still null, so skipping them when there's no current
+gameweek would make the opening waiver message of every season unsendable.
+`runDraftTasks` never reads `current_event`; it resolves its own gameweek from
+the deadline list, which is unambiguous year-round.
 
 ## Failure philosophy
 
