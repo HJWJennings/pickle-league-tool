@@ -1,6 +1,6 @@
 # Pickle League — project context
 
-Weekly stats and fine bookkeeping for a private FPL Draft league of 9–10
+Weekly stats and fine bookkeeping for a private FPL Draft league of 9
 friends. Runs once a week on GitHub Actions cron, sends a message to Harry on
 Telegram, who forwards it to the league's WhatsApp group.
 
