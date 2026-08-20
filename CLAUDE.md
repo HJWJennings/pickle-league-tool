@@ -108,6 +108,43 @@ yourself, outside the tool.
   history itself, with a clear idea of which already-sent fines and balances
   will change as a result — never as a casual edit.
 
+## Display names (`config.managers`)
+
+The weekly Telegram/WhatsApp message shows each manager as
+`"{teamName} - {managerName}"` (e.g. "Mæts back on Semenyo - Harry Jennings"),
+sourced from `config.managers`: an array of
+`{ entryId, initials, teamName, managerName }`, one entry per manager, keyed
+by the same `entryId` used everywhere else in `config.json` — no separate
+identity system.
+
+```json
+"managers": [
+  { "entryId": 2105, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" }
+]
+```
+
+`src/message.js` builds an `entryId → record` lookup from `config.managers`
+fresh on every call and falls back to a bare `#entryId` if a manager isn't in
+the array (e.g. an unfilled `TODO` row) — so a missing entry degrades the
+display rather than crashing the run.
+
+**`ledger.csv` deliberately does not use this.** `src/ledger.js` is untouched
+by `config.managers` and keeps reading `state.managers` (the directory
+`index.js` refreshes from the live API's `entry_name`/player name each run)
+for its `Team`/`Manager` columns, exactly as before. Full display names are
+for the group-facing message only; the CSV stays on whatever `state.managers`
+holds and isn't meant to be forwarded to anyone. `config.managers`'s
+`initials` field is there for your own reference when scanning the config by
+eye — nothing in the tool currently reads it.
+
+Entry IDs change every season (see Season rollover below), so `config.managers`
+needs the same season-start refresh as `pickle.history`. Right now only the
+current pickle's real `entryId` (2105) is known; the other rows are seeded
+with fake negative placeholder IDs and `"TODO"` values — fill both in from a
+`--dry-run`'s output (or the FPL Draft API directly) once the real IDs are
+available. Don't invent names or IDs in the meantime; the `#entryId` fallback
+is the correct behaviour for an unfilled row, not a bug to work around.
+
 ## MOTM months (`config.motmMonths`)
 
 Manager-of-the-month gameweek ranges live in `config.motmMonths`: an array of
@@ -145,7 +182,7 @@ double-count one.
 - `src/pickle.js` — pure logic, no I/O. Easiest place to test changes.
 - `src/message.js` — message formatting
 - `src/ledger.js` — CSV formatting for `ledger.csv`, pure, no I/O
-- `config.json` — league ID, pickle history, MOTM month ranges
+- `config.json` — league ID, pickle history, display names, MOTM month ranges
 - `state.json` — written by the bot each week, committed back
 - `ledger.csv` — row-per-manager-per-gameweek fine ledger for manually
   checking the maths (points, pickle's score, fined Y/N, running balance).
@@ -192,6 +229,9 @@ graceful fallback that hides a broken API.
 Entry IDs change every season. Each August: archive `state.json`, reset it,
 set the new `leagueId` and `expectedManagers`, start a fresh
 `pickle.history` with one entry at `fromGw: 1` for the new season's pickle,
-and replace `motmMonths` with that season's real month/gameweek ranges taken
-from the fixture list (`validateMotmMonths` will refuse to run if the new
-ranges don't cover exactly GW1–38 with no gaps or overlaps).
+refresh `config.managers` with the new season's real `entryId`s (`teamName`/
+`managerName`/`initials` for people already in the league can usually carry
+over unchanged), and replace `motmMonths` with that season's real
+month/gameweek ranges taken from the fixture list (`validateMotmMonths` will
+refuse to run if the new ranges don't cover exactly GW1–38 with no gaps or
+overlaps).

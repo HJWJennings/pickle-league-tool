@@ -9,6 +9,18 @@
     ]
   },
 
+  "managers": [
+    { "entryId": 2105, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -1, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -2, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -3, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -4, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -5, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -6, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -7, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
+    { "entryId": -8, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" }
+  ],
+
   "fine": {
     "amount": 1,
     "floatStart": 10,
