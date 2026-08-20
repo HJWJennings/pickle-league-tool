@@ -1,7 +1,8 @@
 # Pickle League — project context
 
 Weekly stats and fine bookkeeping for a private FPL Draft league of 9
-friends. Runs once a week on GitHub Actions cron, sends a message to Harry on
+friends. Runs hourly on a GitHub Actions cron — guards in `index.js`, not the
+schedule, decide when anything actually sends — and messages Harry on
 Telegram, who forwards it to the league's WhatsApp group.
 
 This is a hobby project. Optimise for "still works in April with zero
@@ -18,8 +19,10 @@ maintenance", not for engineering elegance.
   run. Never cache derived values — that is what makes re-runs, backfills and
   corrected scores safe. A double-fined friend is the failure mode this design
   exists to prevent. (Plus the "already sent" markers — `lastReportedGw`,
-  `lastWaiverGw`, `lastFreeAgencyGw` — and the one documented exception,
-  `announcedTradeIds`; see **Trade detection** below.)
+  `lastWaiverGw`, `lastFreeAgencyGw` — and two documented exceptions,
+  `announcedTradeIds` and `unrecognizedTransactionsAlerted`. Both record a
+  side effect that happened at an arbitrary time rather than a derived value;
+  see **Trade detection** and **Alert once** below.)
 - **No database, no dashboard, no web frontend.** Git is the datastore.
 - **Never commit secrets.** `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` are GitHub
   repo secrets, read from `process.env`.
@@ -177,30 +180,86 @@ an overlap between months, or doesn't cover exactly GW1–38, since a gap would
 silently drop a gameweek from every month's total and an overlap would
 double-count one.
 
-## Waivers, free agency and trades — ⚠️ SCAFFOLDING, not finished features
+## Waivers, free agency and trades — ⚠️ PARTIALLY confirmed
 
-Three additions in `src/draft.js`, all of which **handle the empty case for
-real and deliberately throw on a populated one**. Every live response so far
-has been `{transactions: []}` / `{trades: []}`, so the shape of a *populated*
-record — field names, nesting, status values — is completely unconfirmed.
-Formatting a guess would put a wrong-but-plausible message in front of the
-group, so instead the run crashes, which sends the Telegram failure alert with
-the raw payload in the log. You then read the real shape off that alert, fill
-in the `TODO(unverified-shape)` blocks, and the throw goes away.
+### What is confirmed
 
-**Do not "fix" these throws by inventing field names.** They are the feature
-until real data exists.
+A transaction record:
+
+```json
+{ "added": "...", "element_in": 490, "element_out": 193, "entry": 190207,
+  "event": 4, "id": 77, "index": 0, "kind": "w", "priority": 1, "result": "a" }
+```
+
+**Only `kind: "w"` + `result: "a"` is confirmed** — a successful waiver claim.
+Player names come from bootstrap-static's `elements[]`, matched on `id`, shown
+via `web_name` (confirmed: id 1 = "Raya").
+
+Everything else is still unseen: the presumed `"f"` kind for free agents,
+whatever a failed claim reports in `result`, and any populated trade record at
+all.
+
+### The unrecognized bucket — a stopgap, not a finished design
+
+`classifyTransactions` splits each gameweek's batch in two: records matching
+the confirmed shape exactly, and everything else. Confirmed records are
+formatted for the group. **Everything else is never formatted** — it goes to
+Harry as a raw-payload alert, once, and is then marked handled.
+
+A `kind: "w"`/`result: "a"` record missing `entry`, `element_in` or
+`element_out` counts as unrecognized too: a variant nobody has seen is not
+worth rendering with a hole in it.
+
+**This is a stopgap pending confirmation of the remaining kind/result
+values.** When they're confirmed, add the real handling in `src/draft.js` and
+the bucket shrinks. Do not instead invent field names to make the bucket
+empty.
 
 | Message | Fires | Guard in `state.json` | Status |
 |---|---|---|---|
-| Waiver results | ~1h after the waiver deadline | `lastWaiverGw` | empty case done, populated **throws** |
-| Free-agency results | at the gameweek deadline | `lastFreeAgencyGw` | empty case done, populated **throws** |
-| Trade detection | every hourly tick, no window | `announcedTradeIds` | silent when quiet, new trade **throws** |
+| Waiver results | ~1h after the waiver deadline | `lastWaiverGw` | **kind `w`/result `a` parsed for real**; anything else alerts |
+| Free-agency results | at the gameweek deadline | `lastFreeAgencyGw` | no confirmed shape — empty case only, anything else alerts |
+| Trade detection | every hourly tick, no window | `announcedTradeIds` | no confirmed shape — silent when quiet, new trade alerts |
 
-Free agency is assumed to come from the *same* `/transactions` endpoint as
-waivers. Whether the two are distinguishable — by a `kind`/`type` field, by
-timestamp, or not at all — is unconfirmed, so `buildFreeAgencyMessage` does
-not attempt to filter. Deciding that split is part of filling in the TODO.
+### Alert once, don't throw hourly
+
+Earlier versions *threw* on an unrecognized payload, so the workflow's failure
+alert fired. On an hourly cron that repeats every hour until someone fixes it.
+Now a single alert goes out and the record is marked handled, keyed by the
+record's own `id` in `state.unrecognizedTransactionsAlerted`.
+
+Keyed by id, deliberately — **not** a boolean or a gameweek number. A later
+payload containing a genuinely *different* unknown shape must still get
+through; suppressing that would be the exact silent-wrongness this project
+exists to avoid. Same array-of-ids shape and same reasoning as
+`announcedTradeIds`, and the same documented exception to the "state.json
+holds only raw points" rule (it records a side effect — a message sent — not a
+derived value).
+
+The id guard is load-bearing rather than redundant: the free-agency window
+re-reads the *same* `/transactions` payload the waiver window already saw 24h
+earlier, so without it the same unknown record would alert twice.
+
+An id-less record can't be marked handled, so it re-alerts each tick. That's
+correct — it's unsuppressable until the real identifier field is known.
+
+### When the group hears nothing
+
+If a gameweek's only transaction records are unrecognized, the waiver message
+is **not** sent at all. "No waivers processed this week" would be a claim we
+can't support — waivers may well have happened in a shape we can't read.
+Silence plus an alert to Harry is honest; a confident "nothing happened" isn't.
+
+Free agency arrives on the *same* `/transactions` endpoint as waivers.
+Confirmed waiver records are skipped there (the waiver message already
+reported them); anything else for that gameweek goes to the bucket. Its "no
+free-agency moves this week" line therefore currently means "nothing we
+recognise", and only becomes fully trustworthy once the remaining kinds are
+confirmed.
+
+**Known limitation:** each gameweek gets exactly two looks at its transactions
+— the waiver window and the deadline window. An unknown record appearing after
+both have passed won't be noticed for that gameweek.
 
 ### Endpoints (`config.endpoints`)
 
@@ -234,7 +293,8 @@ ambiguous.
 
 ⚠️ Only the `deadline_time` *field* is confirmed. Whether `bootstrap-static`
 returns `events` as a bare array or wrapped as `events.data` is not, so
-`getEvents` unwraps both and throws on anything else.
+`getBootstrap` unwraps both (for `events` and `elements` alike) and throws on
+anything else.
 
 ### Trade detection — the documented exception to the state.json rule
 
@@ -254,9 +314,10 @@ It is still *not* a derived value being cached: it's a record of an external
 side effect (a message sent), which is exactly the same category as
 `lastReportedGw`. Nothing about fines, balances or tables reads it.
 
-Note the throw deliberately does **not** update `announcedTradeIds` — so an
-unannounced trade keeps re-triggering the alert every hour until the TODO is
-filled in, rather than being silently swallowed on the first run.
+A new trade is alerted on once (raw records, to Harry, never formatted for the
+group) and its id is then added to `announcedTradeIds` so the hourly cron
+doesn't repeat it. A trade record with no `id` can't be recorded, so it
+re-alerts every tick until the real identifier field is confirmed.
 
 ## Layout
 
@@ -267,8 +328,9 @@ filled in, rather than being silently swallowed on the first run.
 - `src/fpl.js` — Draft API calls
 - `src/pickle.js` — pure logic, no I/O. Easiest place to test changes.
 - `src/deadlines.js` — pure deadline/window maths, no I/O, no clock reads
-- `src/draft.js` — waiver/free-agency/trade scaffolding, pure. ⚠️ throws on
-  populated payloads by design — see above.
+- `src/draft.js` — waiver/free-agency/trade parsing, pure. Only the confirmed
+  transaction shape is formatted; anything else is bucketed for a one-off
+  alert — see above.
 - `src/message.js` — message formatting
 - `src/ledger.js` — CSV formatting for `ledger.csv`, pure, no I/O
 - `config.json` — league ID, endpoints, pickle history, display names, MOTM
@@ -313,8 +375,8 @@ For logic changes, prefer the pure modules (`src/pickle.js`,
 `src/deadlines.js`, `src/draft.js`) — they need no network and no fixtures
 beyond plain objects. To exercise `index.js`'s wiring without network, stub
 `globalThis.fetch` in a throwaway script and dynamic-`import()` it with
-`--dry-run`; that's how the hourly-tick paths (waiver window open, populated
-payload throws) were verified.
+`--dry-run`; that's how the hourly-tick paths (waiver window open, confirmed
+claim rendered, unrecognized record alerted exactly once) were verified.
 
 Off-season note: the Draft API returns no current gameweek outside the season,
 so a dry run will exit early rather than showing a message.
@@ -324,15 +386,20 @@ so a dry run will exit early rather than showing a message.
 The script **throws** on suspicious data — wrong manager count, non-numeric
 points, everyone on zero, pickle not in the league, `motmMonths` with a gap,
 overlap, or that doesn't cover exactly GW1–38, endpoint URLs that don't match
-`leagueId`, an unparseable `deadline_time`, and any populated
-waiver/free-agency/trade payload (see the scaffolding section above). A crash
-sends a Telegram alert; a wrong-but-plausible message doesn't. Prefer loud
-failure over a graceful fallback that hides a broken API.
+`leagueId`, and an unparseable `deadline_time`. A crash sends a Telegram
+alert; a wrong-but-plausible message doesn't. Prefer loud failure over a
+graceful fallback that hides a broken API.
+
+The one deliberate exception is an unrecognized transaction/trade record.
+That alerts once and marks itself handled rather than throwing, because on an
+hourly cron a throw repeats every hour forever. It is still never formatted
+for the group — see the waivers section above.
 
 ## Season rollover
 
 Entry IDs change every season. Each August: archive `state.json`, reset it
-(including `lastWaiverGw`, `lastFreeAgencyGw` and `announcedTradeIds`), set
+(including `lastWaiverGw`, `lastFreeAgencyGw`, `announcedTradeIds` and
+`unrecognizedTransactionsAlerted`), set
 the new `leagueId` and `expectedManagers`, update **both** URLs in
 `config.endpoints` to the new league id (`validateEndpoints` throws if they
 still point at the old one), start a fresh

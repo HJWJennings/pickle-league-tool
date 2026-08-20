@@ -36,16 +36,26 @@ function seasonTableBlock(table, managersByEntryId) {
   return ['```', ...lines, '```'].join('\n');
 }
 
-export function buildMessage(state, config, gw) {
-  // Group-facing display only — "*{teamName}*, {managerName}", sourced from
-  // config.managers (hand-maintained), not state.managers (the API scrape
-  // ledger.csv still uses). Falls back to a bare entryId if a manager isn't
-  // in config.managers yet, e.g. a TODO row not filled in.
-  const managersByEntryId = new Map(config.managers.map((m) => [m.entryId, m]));
-  const display = (entryId) => {
+/**
+ * Group-facing display only — "*{teamName}*, {managerName}", sourced from
+ * config.managers (hand-maintained), not state.managers (the API scrape
+ * ledger.csv still uses). Falls back to a bare entryId if a manager isn't
+ * in config.managers yet, e.g. a TODO row not filled in.
+ *
+ * Exported so src/draft.js renders managers identically — one definition of
+ * the format, so the waiver message can't drift from the weekly one.
+ */
+export function managerDisplay(config) {
+  const managersByEntryId = new Map((config?.managers ?? []).map((m) => [m.entryId, m]));
+  return (entryId) => {
     const m = managersByEntryId.get(Number(entryId));
     return m ? `${b(m.teamName)}, ${m.managerName}` : `#${entryId}`;
   };
+}
+
+export function buildMessage(state, config, gw) {
+  const managersByEntryId = new Map(config.managers.map((m) => [m.entryId, m]));
+  const display = managerDisplay(config);
 
   const stats = weeklyStats(state, gw);
   if (!stats) return `No data recorded for GW${gw}.`;

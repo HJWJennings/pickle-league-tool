@@ -78,25 +78,37 @@ export async function getEntryHistory(entryId) {
   return (data.history ?? []).map((h) => ({ event: h.event, points: h.points }));
 }
 
-/**
- * Gameweek list, for deadline maths.
- *
- * `deadline_time` on each event is CONFIRMED (GW1 = 2026-08-21T17:30:00Z).
- * VERIFY: the container. Some FPL endpoints return `events` as a bare array,
- * others wrap it as `events.data`. Both are unwrapped here; anything else
- * throws rather than silently yielding an empty list, which would leave every
- * time-window guard permanently closed and the new messages silently dead.
- */
-export async function getEvents() {
-  const data = await get('/bootstrap-static');
-  const events = Array.isArray(data.events) ? data.events : data.events?.data;
-  if (!Array.isArray(events)) {
+/** Some draft endpoints return a bare array, others wrap it as `.data`. */
+function unwrapList(value, name, keys) {
+  const list = Array.isArray(value) ? value : value?.data;
+  if (!Array.isArray(list)) {
     throw new Error(
-      `bootstrap-static returned no usable events array ` +
-        `(got ${JSON.stringify(Object.keys(data ?? {}))}). Check the shape in src/fpl.js.`
+      `bootstrap-static returned no usable ${name} array ` +
+        `(got ${JSON.stringify(keys)}). Check the shape in src/fpl.js.`
     );
   }
-  return events;
+  return list;
+}
+
+/**
+ * Gameweek list (for deadline maths) and player list (for waiver messages),
+ * from one request — both live on bootstrap-static and both are needed on
+ * the same tick.
+ *
+ * CONFIRMED: `events[].deadline_time` (GW1 = 2026-08-21T17:30:00Z) and
+ * `elements[].web_name` (id 1 = "Raya").
+ * VERIFY: the containers. Either list may come back bare or wrapped as
+ * `.data`; both are unwrapped, and anything else throws rather than silently
+ * yielding an empty list — an empty events list would leave every time-window
+ * guard permanently closed and the new messages silently dead.
+ */
+export async function getBootstrap() {
+  const data = await get('/bootstrap-static');
+  const keys = Object.keys(data ?? {});
+  return {
+    events: unwrapList(data?.events, 'events', keys),
+    elements: unwrapList(data?.elements, 'elements', keys)
+  };
 }
 
 /**

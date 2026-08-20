@@ -3,11 +3,11 @@ import {
   getGameState,
   getLeague,
   getEntryHistory,
-  getEvents,
+  getBootstrap,
   getTransactions,
   getTrades
 } from './src/fpl.js';
-import { buildMessage } from './src/message.js';
+import { buildMessage, managerDisplay } from './src/message.js';
 import {
   missingWeeks,
   validatePickleHistory,
@@ -16,9 +16,10 @@ import {
 } from './src/pickle.js';
 import {
   validateEndpoints,
-  buildWaiverMessage,
-  buildFreeAgencyMessage,
-  checkTrades
+  waiverReport,
+  freeAgencyReport,
+  tradeReport,
+  buildUnrecognizedAlert
 } from './src/draft.js';
 import { gameweekInWaiverWindow, gameweekInDeadlineWindow } from './src/deadlines.js';
 import { ledgerCsv } from './src/ledger.js';
@@ -187,7 +188,46 @@ async function runGameweekReport(config, state, game, gw) {
  */
 async function runDraftTasks(config, state) {
   const now = new Date();
-  const events = await getEvents();
+  const { events, elements } = await getBootstrap();
+  const display = managerDisplay(config);
+
+  /**
+   * Unrecognized records are reported ONCE and then marked handled, keyed by
+   * the record's own id. Not a boolean or a gameweek number: a later payload
+   * with a genuinely different unknown shape must still get through, and
+   * suppressing that would be exactly the silent wrongness we're avoiding.
+   * Same shape and reasoning as announcedTradeIds.
+   */
+  const alerted = new Set((state.unrecognizedTransactionsAlerted ?? []).map(String));
+  const unseen = (records) => records.filter((r) => r?.id == null || !alerted.has(String(r.id)));
+
+  const sendAlert = async (kind, records, gw) => {
+    const alert = buildUnrecognizedAlert(kind, records, { gw });
+    console.log('\n' + alert + '\n');
+    if (DRY) {
+      console.log('Dry run — alert not sent, nothing marked handled.');
+      return;
+    }
+    for (const r of records) {
+      if (r?.id != null) alerted.add(String(r.id));
+    }
+    state.unrecognizedTransactionsAlerted = [...alerted];
+    await writeState(state, config);
+    await sendToTelegram(alert);
+    await writeStepSummary(alert);
+  };
+
+  const sendMessage = async (message, mark) => {
+    console.log('\n' + message + '\n');
+    if (DRY) {
+      console.log('Dry run — message not written or sent.');
+      return;
+    }
+    mark();
+    await writeState(state, config);
+    await sendToTelegram(message);
+    await writeStepSummary(message);
+  };
 
   // --- Waiver results: ~1h after the waiver deadline (deadline - 24h) ---
   const waiverGw = gameweekInWaiverWindow(events, now);
@@ -198,16 +238,20 @@ async function runDraftTasks(config, state) {
   } else {
     console.log(`In GW${waiverGw} waiver-results window.`);
     const payload = await getTransactions(config.endpoints.transactions);
-    const message = buildWaiverMessage(payload, waiverGw); // throws if populated
-    console.log('\n' + message + '\n');
-    if (DRY) {
-      console.log('Dry run — waiver message not written or sent.');
+    const { message, unrecognized } = waiverReport(payload, waiverGw, { elements, display });
+
+    if (message) {
+      await sendMessage(message, () => {
+        state.lastWaiverGw = waiverGw;
+      });
     } else {
-      state.lastWaiverGw = waiverGw;
-      await writeState(state, config);
-      await sendToTelegram(message);
-      await writeStepSummary(message);
+      // Records existed but none were readable — saying "no waivers" would
+      // be a guess, so the group hears nothing and Harry gets the alert.
+      console.log(`GW${waiverGw}: no recognizable waiver claims — nothing sent to the group.`);
     }
+
+    const fresh = unseen(unrecognized);
+    if (fresh.length) await sendAlert('transaction records', fresh, waiverGw);
   }
 
   // --- Free-agency results: at the gameweek deadline ---
@@ -219,24 +263,42 @@ async function runDraftTasks(config, state) {
   } else {
     console.log(`In GW${faGw} free-agency-results window.`);
     const payload = await getTransactions(config.endpoints.transactions);
-    const message = buildFreeAgencyMessage(payload, faGw); // throws if populated
-    console.log('\n' + message + '\n');
-    if (DRY) {
-      console.log('Dry run — free-agency message not written or sent.');
+    const { message, unrecognized } = freeAgencyReport(payload, faGw);
+
+    if (message) {
+      await sendMessage(message, () => {
+        state.lastFreeAgencyGw = faGw;
+      });
     } else {
-      state.lastFreeAgencyGw = faGw;
-      await writeState(state, config);
-      await sendToTelegram(message);
-      await writeStepSummary(message);
+      console.log(`GW${faGw}: unreadable transaction records — nothing sent to the group.`);
     }
+
+    const fresh = unseen(unrecognized);
+    if (fresh.length) await sendAlert('transaction records', fresh, faGw);
   }
 
   // --- Trades: background check, no schedule and no message when quiet ---
   // Trades complete whenever the two managers agree, not at any gameweek
   // checkpoint, so this runs on every tick with no time window at all.
   const trades = await getTrades(config.endpoints.trades);
-  checkTrades(trades, state.announcedTradeIds); // throws if anything is new
-  console.log('No unannounced trades.');
+  const { unrecognized, announceIds } = tradeReport(trades, state.announcedTradeIds);
+
+  if (unrecognized.length === 0) {
+    console.log('No unannounced trades.');
+  } else {
+    // No confirmed trade shape at all yet, so a new trade is never formatted
+    // for the group — it's reported raw to Harry, once.
+    const alert = buildUnrecognizedAlert('trade records', unrecognized);
+    console.log('\n' + alert + '\n');
+    if (DRY) {
+      console.log('Dry run — trade alert not sent, nothing marked announced.');
+    } else {
+      state.announcedTradeIds = [...(state.announcedTradeIds ?? []), ...announceIds];
+      await writeState(state, config);
+      await sendToTelegram(alert);
+      await writeStepSummary(alert);
+    }
+  }
 }
 
 /**
