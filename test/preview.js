@@ -28,7 +28,7 @@ const ID = Object.fromEntries(MANAGERS.map((m, i) => [m, 101 + i]));
 const config = {
   leagueId: 999999,
   expectedManagers: MANAGERS.length,
-  pickle: { entryId: ID[PICKLE], label: PICKLE },
+  pickle: { history: [{ fromGw: 1, entryId: ID[PICKLE], label: PICKLE }] },
   fine: { amount: 1, floatStart: 10, lowBalanceWarning: 3 },
   motm: { tieRule: 'split' },
   // Placeholder ranges — replace with your real ones before the season.

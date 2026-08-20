@@ -10,7 +10,10 @@ import { ledgerRows, ledgerCsv } from '../src/ledger.js';
 
 const PICKLE = 3;
 
-const config = () => ({ pickle: { entryId: PICKLE }, fine: { amount: 1, floatStart: 10 } });
+const config = (history = [{ fromGw: 1, entryId: PICKLE }]) => ({
+  pickle: { history },
+  fine: { amount: 1, floatStart: 10 }
+});
 
 const state = (gameweeks, managers = {}) => ({ season: 'test', managers, gameweeks });
 
@@ -66,6 +69,61 @@ describe('ledger rows', () => {
     const row = ledgerRows(s, config())[0];
     assert.equal(row.teamName, 'Team A');
     assert.equal(row.manager, 'Alice');
+  });
+
+  test('a later pickle change does not rewrite already-recorded early gameweeks (backfill regression)', () => {
+    const OLD_PICKLE = 3;
+    const NEW_PICKLE = 9;
+
+    // Recorded raw points, exactly as a backfill from state.json would see
+    // them — every manager's score for every week, regardless of who was
+    // the pickle at the time.
+    const s = state({
+      1: { 1: 60, 2: 40, [OLD_PICKLE]: 50, [NEW_PICKLE]: 45 },
+      2: { 1: 30, 2: 70, [OLD_PICKLE]: 50, [NEW_PICKLE]: 55 },
+      3: { 1: 60, 2: 40, [OLD_PICKLE]: 50, [NEW_PICKLE]: 45 },
+      4: { 1: 20, 2: 70, [OLD_PICKLE]: 50, [NEW_PICKLE]: 45 }
+    });
+
+    // "Before": as things stood while only the old pickle was ever configured.
+    const before = ledgerRows(s, config([{ fromGw: 1, entryId: OLD_PICKLE }]));
+    const beforeGw1 = before.filter((r) => r.gw === 1);
+    const beforeGw2 = before.filter((r) => r.gw === 2);
+
+    // A second history entry is added for GW3 onward, and the full history
+    // (GW1-4) is recomputed from state.json in one go, as a backfill would.
+    const after = ledgerRows(
+      s,
+      config([
+        { fromGw: 1, entryId: OLD_PICKLE },
+        { fromGw: 3, entryId: NEW_PICKLE }
+      ])
+    );
+    const afterGw1 = after.filter((r) => r.gw === 1);
+    const afterGw2 = after.filter((r) => r.gw === 2);
+    const afterGw3 = after.filter((r) => r.gw === 3);
+    const afterGw4 = after.filter((r) => r.gw === 4);
+
+    // Early gameweeks (before the new entry's fromGw) are byte-for-byte
+    // unchanged by adding a later history entry.
+    assert.deepEqual(afterGw1, beforeGw1, 'GW1 rows must match the pre-change run exactly');
+    assert.deepEqual(afterGw2, beforeGw2, 'GW2 rows must match the pre-change run exactly');
+    assert.ok(
+      afterGw1.every((r) => r.picklePoints === 50) && afterGw2.every((r) => r.picklePoints === 50),
+      'GW1-2 still measured against the old pickle\'s score'
+    );
+
+    // Later gameweeks (from the new entry's fromGw) use the new pickle.
+    assert.ok(
+      afterGw3.every((r) => r.picklePoints === 45) && afterGw4.every((r) => r.picklePoints === 45),
+      'GW3-4 measured against the new pickle\'s score'
+    );
+
+    // And the fine outcome for each week reflects the pickle that actually applied then.
+    assert.equal(afterGw1.find((r) => r.entryId === 2).fined, true, 'GW1: 40 < old pickle 50');
+    assert.equal(afterGw2.find((r) => r.entryId === 1).fined, true, 'GW2: 30 < old pickle 50');
+    assert.equal(afterGw3.find((r) => r.entryId === 2).fined, true, 'GW3: 40 < new pickle 45');
+    assert.equal(afterGw4.find((r) => r.entryId === 1).fined, true, 'GW4: 20 < new pickle 45');
   });
 });
 

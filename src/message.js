@@ -5,7 +5,8 @@ import {
   monthTable,
   managerOfTheMonth,
   weeklyStats,
-  missingWeeks
+  missingWeeks,
+  pickleEntryIdForGw
 } from './pickle.js';
 
 // WhatsApp markup: *bold*, _italic_, ~strike~
@@ -19,10 +20,10 @@ export function buildMessage(state, config, gw) {
   const stats = weeklyStats(state, gw);
   if (!stats) return `No data recorded for GW${gw}.`;
 
-  const pickleId = config.pickle.entryId;
   const { amount, floatStart, lowBalanceWarning } = config.fine;
+  const pickleId = pickleEntryIdForGw(config.pickle.history, gw);
   const { picklePoints, fined, drew } = finesForWeek(state, gw, pickleId, amount);
-  const ledger = fineLedger(state, pickleId, amount);
+  const ledger = fineLedger(state, config.pickle.history, amount);
 
   const out = [];
   out.push(`${b(`🥒 PICKLE LEAGUE — GW${gw}`)}`);

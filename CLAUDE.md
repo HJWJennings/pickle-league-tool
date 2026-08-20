@@ -35,6 +35,49 @@ maintenance", not for engineering elegance.
 - Double gameweeks are **not** normalised. Planning for them is part of the
   game.
 
+## Pickle history (`config.pickle.history`)
+
+Who counts as "the pickle" is not a single value — it's an array of
+`{ fromGw, entryId }`, e.g.:
+
+```json
+"pickle": {
+  "history": [
+    { "fromGw": 1, "entryId": 2105, "label": "Cormac" }
+  ]
+}
+```
+
+Every place that needs "the pickle" (fines, the weekly message, `ledger.csv`,
+the startup sanity checks) resolves it **per gameweek** via
+`pickleEntryIdForGw(history, gw)` in `src/pickle.js`: the entry with the
+highest `fromGw` that is `<= gw`. It's a pure lookup, recomputed fresh on
+every call — nothing about it is cached, so `src/message.js` and
+`src/ledger.js` can never disagree about which pickle applied to a given
+gameweek, and re-running or backfilling never changes what an *already
+recorded* gameweek resolves to, as long as you only ever append entries
+after the fact.
+
+`pickleEntryIdForGw` (via `validatePickleHistory`) throws — doesn't warn —
+if `history` is empty, out of order, or has two entries sharing a `fromGw`,
+since silently picking one would be exactly the kind of wrong-but-plausible
+result this project refuses to produce.
+
+**The tool never writes to `pickle.history`.** No code path adds, edits, or
+removes an entry automatically — changing the pickle, including correcting
+a past mistake, is always a manual edit to `config.json` that you make
+yourself, outside the tool.
+
+- **Adding a new entry** for a future `fromGw` (the normal case — the league
+  votes in a new pickle) is safe and expected at any time; it only affects
+  gameweeks from that `fromGw` onward.
+- **Editing an existing entry's `fromGw` or `entryId`** rewrites what every
+  gameweek from that point resolves to on the next recompute — including
+  gameweeks already reported and already reflected in `ledger.csv`'s
+  balances. Only do this deliberately, to correct a genuine mistake in the
+  history itself, with a clear idea of which already-sent fines and balances
+  will change as a result — never as a casual edit.
+
 ## Layout
 
 - `index.js` — orchestrator: fetch, sanity-check, record, derive, send
@@ -42,7 +85,7 @@ maintenance", not for engineering elegance.
 - `src/pickle.js` — pure logic, no I/O. Easiest place to test changes.
 - `src/message.js` — message formatting
 - `src/ledger.js` — CSV formatting for `ledger.csv`, pure, no I/O
-- `config.json` — league ID, pickle entry ID, month ranges
+- `config.json` — league ID, pickle history, month ranges
 - `state.json` — written by the bot each week, committed back
 - `ledger.csv` — row-per-manager-per-gameweek fine ledger for manually
   checking the maths (points, pickle's score, fined Y/N, running balance).
@@ -86,5 +129,6 @@ graceful fallback that hides a broken API.
 ## Season rollover
 
 Entry IDs change every season. Each August: archive `state.json`, reset it,
-set the new `leagueId`, `pickle.entryId`, `expectedManagers`, and month ranges
-taken from the real gameweek deadlines.
+set the new `leagueId` and `expectedManagers`, start a fresh
+`pickle.history` with one entry at `fromGw: 1` for the new season's pickle,
+and set month ranges taken from the real gameweek deadlines.

@@ -4,8 +4,9 @@
   "expectedManagers": 9,
 
   "pickle": {
-    "entryId": 2105,
-    "label": "Cormac"
+    "history": [
+      { "fromGw": 1, "entryId": 2105, "label": "Cormac" }
+    ]
   },
 
   "fine": {
