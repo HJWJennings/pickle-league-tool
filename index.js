@@ -2,6 +2,7 @@ import { readFile, writeFile, appendFile } from 'node:fs/promises';
 import { getGameState, getLeague, getEntryHistory } from './src/fpl.js';
 import { buildMessage } from './src/message.js';
 import { missingWeeks } from './src/pickle.js';
+import { ledgerCsv } from './src/ledger.js';
 
 const args = new Set(process.argv.slice(2));
 const FORCE = args.has('--force'); // record + send even if unsettled or already reported
@@ -9,6 +10,12 @@ const BACKFILL = args.has('--backfill'); // fill gameweeks the cron missed
 const DRY = args.has('--dry-run'); // print only: no state write, no send
 
 const readJson = async (p) => JSON.parse(await readFile(p, 'utf8'));
+
+/** Keeps ledger.csv committed in the same run as state.json, always derived fresh. */
+async function writeState(state, config) {
+  await writeFile('./state.json', JSON.stringify(state, null, 2) + '\n');
+  await writeFile('./ledger.csv', ledgerCsv(state, config));
+}
 
 /**
  * Fails loudly on the failure modes that would otherwise pass silently.
@@ -114,7 +121,7 @@ async function main() {
   if (alreadySent && !FORCE) {
     console.log(`GW${gw} already reported (last sent: GW${state.lastReportedGw}).`);
     console.log('International break or nothing new — saving state, not sending.');
-    if (!DRY) await writeFile('./state.json', JSON.stringify(state, null, 2) + '\n');
+    if (!DRY) await writeState(state, config);
     return;
   }
 
@@ -127,7 +134,7 @@ async function main() {
   }
 
   state.lastReportedGw = gw;
-  await writeFile('./state.json', JSON.stringify(state, null, 2) + '\n');
+  await writeState(state, config);
   await sendToTelegram(message);
   await writeStepSummary(message);
 }

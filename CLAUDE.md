@@ -41,8 +41,13 @@ maintenance", not for engineering elegance.
 - `src/fpl.js` — Draft API calls
 - `src/pickle.js` — pure logic, no I/O. Easiest place to test changes.
 - `src/message.js` — message formatting
+- `src/ledger.js` — CSV formatting for `ledger.csv`, pure, no I/O
 - `config.json` — league ID, pickle entry ID, month ranges
 - `state.json` — written by the bot each week, committed back
+- `ledger.csv` — row-per-manager-per-gameweek fine ledger for manually
+  checking the maths (points, pickle's score, fined Y/N, running balance).
+  Recomputed from scratch from `state.json` on every run, same as everything
+  else derived — never hand-edit it, edits are overwritten next run.
 
 ## Known-unverified
 
