@@ -1,0 +1,19 @@
+name: Telegram preview (throwaway)
+on:
+  push:
+    branches: [tmp/tg-preview]
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node render-and-send.mjs 1
+      - run: |
+          git status --porcelain
+          if [ -n "$(git status --porcelain)" ]; then echo "FAIL"; exit 1; fi
+          echo "OK: nothing written."
