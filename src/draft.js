@@ -79,6 +79,28 @@ export function playerName(elements, id) {
 }
 
 /**
+ * Three-letter club code for a team id, e.g. 14 -> "LIV".
+ * CONFIRMED: bootstrap-static returns teams[] as { id, short_name, ... } and
+ * elements[].team is that numeric id. Every short_name is three letters.
+ */
+export function clubShortName(teams, teamId) {
+  const t = (teams ?? []).find((x) => Number(x?.id) === Number(teamId));
+  return t?.short_name ?? null;
+}
+
+/**
+ * A player as shown in the message: "Konsa (AVL)".
+ * Degrades to the bare name if the club can't be resolved, rather than
+ * printing an empty bracket — same principle as the #id fallbacks.
+ */
+export function playerLabel(elements, teams, id) {
+  const el = (elements ?? []).find((e) => Number(e?.id) === Number(id));
+  const name = el?.web_name ?? `#${id}`;
+  const club = clubShortName(teams, el?.team);
+  return club ? `${name} (${club})` : name;
+}
+
+/**
  * Split one gameweek's transactions into accepted claims, denied claims,
  * and everything else.
  *
@@ -115,7 +137,20 @@ export function classifyTransactions(payload, gw) {
     else unrecognized.push(t);
   }
 
-  return { claims, denied, unrecognized };
+  // CONFIRMED against the real GW1 batch: `index` is the order the waivers
+  // were actually processed in, and sorting by it reproduces the league's own
+  // results table exactly (12/12 rows). The payload itself arrives grouped by
+  // manager instead, so without this the message lists claims in an order
+  // that means nothing. `priority` is the round — everyone's first claim,
+  // then their second, and so on — which is why an index-ordered list shows a
+  // manager's later claim failing on a player their own earlier claim took.
+  const byIndex = (a, b) => a.index - b.index;
+
+  return {
+    claims: claims.sort(byIndex),
+    denied: denied.sort(byIndex),
+    unrecognized
+  };
 }
 
 /**
@@ -132,7 +167,7 @@ export function classifyTransactions(payload, gw) {
 export function waiverReport(
   payload,
   gw,
-  { elements = [], label = (e) => `#${e}`, deadline = null } = {}
+  { elements = [], teams = [], label = (e) => `#${e}`, deadline = null } = {}
 ) {
   const { claims, denied, unrecognized } = classifyTransactions(payload, gw);
 
@@ -140,9 +175,9 @@ export function waiverReport(
    * One line per claim — deliberately NOT merged per manager. Two claims by
    * the same manager are two separate transactions and get two lines.
    *
-   * Shape is "II | Out → In": initials, a pipe, then the player leaving, an
-   * arrow, and the player arriving. Reads in the direction the move actually
-   * happened.
+   * Shape is "II | Out (CLU) → In (CLU)": initials, a pipe, the player
+   * leaving with their club, an arrow, and the player arriving with theirs.
+   * Reads in the direction the move actually happened.
    *
    * The separator is a literal pipe rather than a tab because a tab's width
    * is up to the client, and inconsistent width is exactly what broke every
@@ -158,8 +193,8 @@ export function waiverReport(
   const lines = (records) =>
     records.map(
       (r) =>
-        `${label(r.entry)} | ${playerName(elements, r.element_out)} → ` +
-        `${playerName(elements, r.element_in)}`
+        `${label(r.entry)} | ${playerLabel(elements, teams, r.element_out)} → ` +
+        `${playerLabel(elements, teams, r.element_in)}`
     );
 
   // Free agency opens once waivers have run and stays open until the
