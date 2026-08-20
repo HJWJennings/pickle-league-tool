@@ -5,8 +5,13 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { buildMessage } from '../src/message.js';
+
+// The real config, so the non-ASCII test below checks what actually ships —
+// not a hand-typed copy that could silently drift or get re-normalized.
+const realConfig = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
 
 const PICKLE = 3;
 
@@ -121,5 +126,33 @@ describe('manager display names', () => {
     const s = state({ 1: { 1: 60, 2: 40, [PICKLE]: 50 } }); // entry 1 tops the week
     const msg = buildMessage(s, config({ managers }), 1);
     assert.match(msg, /Mæts back on Semenyo - Harry Jennings/);
+  });
+
+  test('the real config.json survives buildMessage with both non-ASCII team names intact', () => {
+    // Real entryIds from config.json: 2105 is the pickle (Cormac R).
+    const realState = {
+      season: 'test',
+      lastReportedGw: null,
+      managers: {},
+      gameweeks: {
+        1: {
+          1931: 90, // Harry Jennings — "Mæts back on Semenyo" (æ) — tops the week
+          2105: 50, // pickle
+          190207: 55,
+          197504: 30, // Rob Wiseman — "She’s an Eze Lover" (curly apostrophe, U+2019) — fined
+          201762: 55,
+          205835: 55,
+          205885: 55,
+          207187: 55,
+          207411: 55
+        }
+      }
+    };
+    const msg = buildMessage(realState, realConfig, 1);
+    assert.match(msg, /🏆 Top: Mæts back on Semenyo - Harry Jennings — 90/);
+    assert.match(msg, /• She’s an Eze Lover - Rob Wiseman — 30 pts/);
+    // Prove it's the real curly apostrophe (U+2019), not a straight quote a
+    // copy/paste or a JSON round-trip could have silently normalized away.
+    assert.equal(realConfig.managers.find((m) => m.entryId === 197504).teamName.includes('’'), true);
   });
 });
