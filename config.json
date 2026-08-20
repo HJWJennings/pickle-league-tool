@@ -3,6 +3,11 @@
 
   "expectedManagers": 9,
 
+  "endpoints": {
+    "transactions": "https://draft.premierleague.com/api/draft/league/812/transactions",
+    "trades": "https://draft.premierleague.com/api/draft/league/812/trades"
+  },
+
   "pickle": {
     "history": [
       { "fromGw": 1, "entryId": 2105, "label": "Cormac" }
@@ -10,15 +15,15 @@
   },
 
   "managers": [
-    { "entryId": 2105, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
-    { "entryId": -1, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
-    { "entryId": -2, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
-    { "entryId": -3, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
-    { "entryId": -4, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
-    { "entryId": -5, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
-    { "entryId": -6, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
-    { "entryId": -7, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" },
-    { "entryId": -8, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" }
+    { "entryId": 1931,   "initials": "HJ", "teamName": "Mæts back on Semenyo", "managerName": "Harry Jennings" },
+    { "entryId": 2105,   "initials": "CR", "teamName": "Better Call Tzol", "managerName": "Cormac R" },
+    { "entryId": 190207, "initials": "NS", "teamName": "Eze Platter", "managerName": "Nat Shaughnessy" },
+    { "entryId": 197504, "initials": "RW", "teamName": "She’s an Eze Lover", "managerName": "Rob Wiseman" },
+    { "entryId": 201762, "initials": "TP", "teamName": "Mr Brobbey", "managerName": "Theo Pennefather" },
+    { "entryId": 205835, "initials": "JJ", "teamName": "The Ollie Hot Wings", "managerName": "Jack Jennings" },
+    { "entryId": 205885, "initials": "RT", "teamName": "Draft Idiot", "managerName": "Ralph Tamplin" },
+    { "entryId": 207187, "initials": "FM", "teamName": "Fergie Time", "managerName": "Fergus Munro" },
+    { "entryId": 207411, "initials": "DC", "teamName": "Pedro Porro for life", "managerName": "David Cole" }
   ],
 
   "fine": {

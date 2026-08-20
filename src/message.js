@@ -13,16 +13,49 @@ import {
 const b = (s) => `*${s}*`;
 const i = (s) => `_${s}_`;
 
-export function buildMessage(state, config, gw) {
-  // Group-facing display only — "{teamName} - {managerName}", sourced from
-  // config.managers (hand-maintained), not state.managers (the API scrape
-  // ledger.csv still uses). Falls back to a bare entryId if a manager isn't
-  // in config.managers yet, e.g. a TODO row not filled in.
-  const managersByEntryId = new Map(config.managers.map((m) => [m.entryId, m]));
-  const display = (entryId) => {
+/**
+ * Season table only: a real aligned table in a monospace block, so
+ * Telegram/WhatsApp render it with a fixed-width font. Team name + initials
+ * (not the full manager name) — column widths are computed fresh from
+ * that week's actual longest name and widest points value, never hardcoded.
+ */
+function seasonTableBlock(table, managersByEntryId) {
+  const rows = table.map((r, idx) => {
+    const m = managersByEntryId.get(Number(r.entryId));
+    const label = m ? `${m.teamName} (${m.initials})` : `#${r.entryId}`;
+    return { rank: idx + 1, label, points: String(r.points) };
+  });
+
+  const nameWidth = Math.max(...rows.map((r) => r.label.length));
+  const pointsWidth = Math.max(...rows.map((r) => r.points.length));
+
+  const lines = rows.map(
+    (r) => `${r.rank}. ${r.label.padEnd(nameWidth)} ${r.points.padStart(pointsWidth)}`
+  );
+
+  return ['```', ...lines, '```'].join('\n');
+}
+
+/**
+ * Group-facing display only — "*{teamName}*, {managerName}", sourced from
+ * config.managers (hand-maintained), not state.managers (the API scrape
+ * ledger.csv still uses). Falls back to a bare entryId if a manager isn't
+ * in config.managers yet, e.g. a TODO row not filled in.
+ *
+ * Exported so src/draft.js renders managers identically — one definition of
+ * the format, so the waiver message can't drift from the weekly one.
+ */
+export function managerDisplay(config) {
+  const managersByEntryId = new Map((config?.managers ?? []).map((m) => [m.entryId, m]));
+  return (entryId) => {
     const m = managersByEntryId.get(Number(entryId));
-    return m ? `${m.teamName} - ${m.managerName}` : `#${entryId}`;
+    return m ? `${b(m.teamName)}, ${m.managerName}` : `#${entryId}`;
   };
+}
+
+export function buildMessage(state, config, gw) {
+  const managersByEntryId = new Map(config.managers.map((m) => [m.entryId, m]));
+  const display = managerDisplay(config);
 
   const stats = weeklyStats(state, gw);
   if (!stats) return `No data recorded for GW${gw}.`;
@@ -88,9 +121,7 @@ export function buildMessage(state, config, gw) {
   // --- Season table ----------------------------------------------------
   out.push('');
   out.push(b('Season table'));
-  stats.table.forEach((r, idx) => {
-    out.push(`${idx + 1}. ${display(r.entryId)} — ${r.points}`);
-  });
+  out.push(seasonTableBlock(stats.table, managersByEntryId));
 
   // --- Jar total & float balances ---------------------------------------
   out.push('');
