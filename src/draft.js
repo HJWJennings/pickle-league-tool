@@ -22,7 +22,6 @@
  * Pure: these take already-fetched data and return strings/objects. No I/O.
  */
 
-import { monospaceTable } from './table.js';
 import { formatUkDeadline } from './deadlines.js';
 
 // WhatsApp markup: *bold*, _italic_
@@ -138,21 +137,25 @@ export function waiverReport(
   const { claims, denied, unrecognized } = classifyTransactions(payload, gw);
 
   /**
-   * One row per claim — deliberately NOT merged per manager. Two claims by
-   * the same manager are two separate transactions and get two rows, so the
-   * In/Out columns stay meaningful.
+   * One line per claim — deliberately NOT merged per manager. Two claims by
+   * the same manager are two separate transactions and get two lines.
+   *
+   * Shape is "II<tab>Out → In": initials, a tab, then the player leaving,
+   * an arrow, and the player arriving. Reads in the direction the move
+   * actually happened.
+   *
+   * No monospace block and no padding, on purpose. The Telegram send sets no
+   * parse_mode, so a ``` block would arrive as literal backticks rendered in
+   * a proportional font, where any padding is decorative at best — which is
+   * why the previous aligned table came apart on a phone. Initials are
+   * uniformly two characters, so these lines hold their shape with nothing
+   * but a tab, in Telegram and in WhatsApp alike.
    */
-  const table = (records) =>
-    monospaceTable(
-      [
-        ['Manager', 'In', 'Out'],
-        ...records.map((r) => [
-          label(r.entry),
-          playerName(elements, r.element_in),
-          playerName(elements, r.element_out)
-        ])
-      ],
-      { align: ['left', 'left', 'left'] }
+  const lines = (records) =>
+    records.map(
+      (r) =>
+        `${label(r.entry)}\t${playerName(elements, r.element_out)} → ` +
+        `${playerName(elements, r.element_in)}`
     );
 
   // Free agency opens once waivers have run and stays open until the
@@ -182,7 +185,7 @@ export function waiverReport(
   const out = [b(`🥒 WAIVERS — GW${gw}`), ''];
 
   if (claims.length) {
-    out.push(table(claims));
+    out.push(...lines(claims));
   } else {
     out.push(i('No claims went through this week.'));
   }
@@ -192,7 +195,7 @@ export function waiverReport(
   if (denied.length) {
     out.push('');
     out.push(b('Missed out'));
-    out.push(table(denied));
+    out.push(...lines(denied));
   }
 
   out.push('');

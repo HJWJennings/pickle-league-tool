@@ -34,6 +34,36 @@ export function managerShortLabel(config) {
 }
 
 /**
+ * Just the manager's name, e.g. "Harry Jennings".
+ *
+ * Used for the waiver tables, which have one row per transaction and so run
+ * much wider than the season table. Every manager name is plain ASCII and at
+ * most 16 characters, where "Team Name (XX)" reaches 25 and drags in `æ` and
+ * a curly apostrophe — both of which can fall back to a proportional glyph
+ * inside a monospace block and break the alignment.
+ */
+export function managerName(config) {
+  const managersByEntryId = new Map((config?.managers ?? []).map((m) => [m.entryId, m]));
+  return (entryId) => managersByEntryId.get(Number(entryId))?.managerName ?? `#${entryId}`;
+}
+
+/**
+ * Just the initials, e.g. "HJ".
+ *
+ * Used by the waiver lines, which need to survive being read in Telegram.
+ * The Telegram send sets no parse_mode on purpose, so a ``` block arrives as
+ * literal backticks and the text renders in Telegram's proportional font —
+ * any column padding is meaningless there and only takes effect once the
+ * message is pasted into WhatsApp. Every manager's initials are exactly two
+ * characters, so a line built from them needs no padding to line up in the
+ * first place, in either client.
+ */
+export function managerInitials(config) {
+  const managersByEntryId = new Map((config?.managers ?? []).map((m) => [m.entryId, m]));
+  return (entryId) => managersByEntryId.get(Number(entryId))?.initials ?? `#${entryId}`;
+}
+
+/**
  * Season table: a real aligned table in a monospace block, so
  * Telegram/WhatsApp render it with a fixed-width font. Team name + initials
  * (not the full manager name) — column widths are computed fresh from

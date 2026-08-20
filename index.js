@@ -7,7 +7,7 @@ import {
   getTransactions,
   getTrades
 } from './src/fpl.js';
-import { buildMessage, managerShortLabel } from './src/message.js';
+import { buildMessage, managerInitials } from './src/message.js';
 import {
   missingWeeks,
   validatePickleHistory,
@@ -199,7 +199,7 @@ async function runGameweekReport(config, state, game, gw) {
 async function runDraftTasks(config, state) {
   const now = new Date();
   const { events, elements } = await getBootstrap();
-  const shortLabel = managerShortLabel(config);
+  const label = managerInitials(config);
 
   /**
    * Unrecognized records are reported ONCE and then marked handled, keyed by
@@ -250,7 +250,7 @@ async function runDraftTasks(config, state) {
     const payload = await getTransactions(config.endpoints.transactions);
     const { message, unrecognized } = waiverReport(payload, waiverGw, {
       elements,
-      label: shortLabel,
+      label,
       deadline: gameweekDeadline(events, waiverGw)
     });
 

@@ -27,11 +27,11 @@ import {
   tradeReport,
   buildUnrecognizedAlert
 } from '../src/draft.js';
-import { managerShortLabel } from '../src/message.js';
+import { managerInitials } from '../src/message.js';
 
 const realConfig = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
-/** The short "Team Name (XX)" identifier used inside the waiver tables. */
-const label = managerShortLabel(realConfig);
+/** Initials — the identifier used on the waiver lines. */
+const label = managerInitials(realConfig);
 
 // CONFIRMED fixture: a real successful waiver claim, exactly as returned.
 const REAL_CLAIM = {
@@ -255,36 +255,41 @@ describe('waiver results message', () => {
     assert.deepEqual(unrecognized, []);
   });
 
-  test('CONFIRMED accepted fixture renders as a table row, not a bullet', () => {
+  test('CONFIRMED accepted fixture renders as "II<tab>Out → In"', () => {
     const { message, unrecognized } = waiverReport({ transactions: [REAL_CLAIM] }, 4, {
       elements: ELEMENTS,
       label
     });
-    assert.match(message, /```/, 'wrapped in a monospace block');
-    assert.match(message, /Manager\s+In\s+Out/, 'has a header row');
-    // entry 190207 is "Eze Platter (NS)" in the real config.
-    assert.match(message, /Eze Platter \(NS\)\s+Semenyo\s+Sels/);
-    assert.doesNotMatch(message, /• /, 'bullets replaced by the table');
+    // entry 190207 is NS. element_out 193 = Sels leaves, element_in 490 = Semenyo arrives.
+    assert.ok(message.includes('NS\tSels → Semenyo'), 'out first, then arrow, then in');
     assert.deepEqual(unrecognized, []);
   });
 
-  test('CONFIRMED denied fixture renders in a "Missed out" table', () => {
+  test('no monospace block — it arrives as literal backticks in Telegram', () => {
+    const { message } = waiverReport({ transactions: [REAL_CLAIM] }, 4, {
+      elements: ELEMENTS,
+      label
+    });
+    assert.doesNotMatch(message, /```/);
+  });
+
+  test('uses initials alone, not the manager or team name', () => {
+    const { message } = waiverReport({ transactions: [REAL_CLAIM] }, 4, {
+      elements: ELEMENTS,
+      label
+    });
+    assert.doesNotMatch(message, /Nat Shaughnessy/);
+    assert.doesNotMatch(message, /Eze Platter/);
+  });
+
+  test('CONFIRMED denied fixture renders under "Missed out" in the same shape', () => {
     const { message, unrecognized } = waiverReport({ transactions: [REAL_DENIED] }, 1, {
       elements: ELEMENTS,
       label
     });
     assert.match(message, /\*Missed out\*/);
-    assert.match(message, /Mæts back on Semenyo \(HJ\)\s+Scott\s+Gravenberch/);
+    assert.ok(message.includes('HJ\tGravenberch → Scott'));
     assert.deepEqual(unrecognized, [], 'result "do" is confirmed — never bucketed');
-  });
-
-  test('uses the short "Team (XX)" identifier, not the full "Team, Manager Name"', () => {
-    const { message } = waiverReport({ transactions: [REAL_CLAIM] }, 4, {
-      elements: ELEMENTS,
-      label
-    });
-    assert.match(message, /Eze Platter \(NS\)/);
-    assert.doesNotMatch(message, /Nat Shaughnessy/, 'full manager name is too wide for a table');
   });
 
   test('no reason for a denial is invented — the API has no reason field', () => {
@@ -315,83 +320,53 @@ describe('waiver results message', () => {
   });
 });
 
-describe('waiver tables — the real GW1 2026/27 batch', () => {
+describe('waiver lines — the real GW1 2026/27 batch', () => {
   const opts = () => ({ elements: GW1_ELEMENTS, label, deadline: new Date(GW1_DEADLINE) });
 
-  test('one row per claim: managers with two claims get two rows, not one merged row', () => {
-    const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    const rows = message.split('\n').filter((l) => /\(HJ\)/.test(l));
-    // Harry had two accepted claims and one denied — three separate rows.
-    assert.equal(rows.length, 3);
-    assert.match(rows[0], /Kluivert/);
-    assert.match(rows[1], /Konsa/);
-    assert.match(rows[2], /Scott/);
-  });
-
-  test('all nine accepted and all three denied rows are present', () => {
+  test('renders every one of the 9 accepted and 3 denied claims', () => {
     const { message, unrecognized } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    const blocks = message.split('```').filter((_, idx) => idx % 2 === 1);
-    assert.equal(blocks.length, 2, 'two separate monospace tables');
-
-    const accepted = blocks[0].trim().split('\n');
-    const missed = blocks[1].trim().split('\n');
-    assert.equal(accepted.length, 10, 'header + 9 accepted claims');
-    assert.equal(missed.length, 4, 'header + 3 denied claims');
-    assert.deepEqual(unrecognized, [], 'nothing bucketed — both results are confirmed');
+    const claimLines = message.split('\n').filter((l) => l.includes('\t'));
+    assert.equal(claimLines.length, 12);
+    assert.deepEqual(unrecognized, [], 'both results are confirmed — nothing bucketed');
   });
 
-  test('columns align: every row matches an independently recomputed layout', () => {
+  test('one line per claim: a manager who claimed twice gets two lines', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    const blocks = message.split('```').filter((_, idx) => idx % 2 === 1);
-
-    const expectedBlock = (records) => {
-      const cells = [
-        ['Manager', 'In', 'Out'],
-        ...records.map((r) => [
-          label(r.entry),
-          GW1_ELEMENTS.find((e) => e.id === r.element_in).web_name,
-          GW1_ELEMENTS.find((e) => e.id === r.element_out).web_name
-        ])
-      ];
-      // Recompute widths here rather than reusing the source's helper, so a
-      // bug in the padding logic can't cancel itself out.
-      const w = [0, 1, 2].map((c) => Math.max(...cells.map((r) => r[c].length)));
-      return cells
-        .map((r) => `${r[0].padEnd(w[0])} ${r[1].padEnd(w[1])} ${r[2]}`.trimEnd())
-        .join('\n');
-    };
-
-    const accepted = GW1_TRANSACTIONS.filter((t) => t.result === 'a');
-    const denied = GW1_TRANSACTIONS.filter((t) => t.result === 'do');
-    assert.equal(blocks[0].trim(), expectedBlock(accepted));
-    assert.equal(blocks[1].trim(), expectedBlock(denied));
+    const hj = message.split('\n').filter((l) => l.startsWith('HJ\t'));
+    assert.deepEqual(hj, [
+      'HJ\tGravenberch → Kluivert',
+      'HJ\tHall → Konsa',
+      'HJ\tGravenberch → Scott'
+    ]);
   });
 
-  test('column widths come from the data, not a hardcoded number', () => {
+  test('every line is initials, one tab, then exactly one arrow', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    // Two managers tie for the widest cell at 25 chars, so the In column
-    // starts at 26 on every row of the accepted table.
-    const widest = Math.max(
-      ...GW1_TRANSACTIONS.filter((t) => t.result === 'a').map((t) => label(t.entry).length)
-    );
-    assert.equal(widest, 25);
-    const row = message.split('\n').find((l) => l.startsWith('Pedro Porro for life (DC)'));
-    assert.equal(row.indexOf('Amad'), widest + 1);
+    for (const line of message.split('\n').filter((l) => l.includes('\t'))) {
+      assert.match(line, /^[A-Z]{2}\t[^\t]+ → [^\t]+$/, line);
+      assert.equal(line.split('\t').length, 2, 'exactly one tab');
+      assert.equal(line.split(' → ').length, 2, 'exactly one arrow');
+    }
+  });
 
-    // Drop BOTH 25-char managers and every remaining row must narrow.
-    const shorter = GW1_TRANSACTIONS.filter((t) => t.entry !== 207411 && t.entry !== 1931);
-    const narrower = waiverReport({ transactions: shorter }, 1, opts()).message;
-    const before = message.split('\n').find((l) => l.startsWith('Mr Brobbey (TP)   '));
-    const after = narrower.split('\n').find((l) => l.startsWith('Mr Brobbey (TP)'));
-    assert.ok(
-      after.indexOf('Madjo') < before.indexOf('Madjo'),
-      'removing the longest names must pull every later column leftwards'
+  test('needs no padding: the identifier is two chars on every single line', () => {
+    const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
+    const widths = new Set(
+      message.split('\n').filter((l) => l.includes('\t')).map((l) => l.split('\t')[0].length)
     );
+    assert.deepEqual([...widths], [2], 'uniform width is what makes this hold shape');
+  });
+
+  test('lines stay short enough not to wrap on a phone', () => {
+    const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
+    const longest = Math.max(
+      ...message.split('\n').filter((l) => l.includes('\t')).map((l) => l.length)
+    );
+    assert.ok(longest <= 32, `longest claim line is ${longest} chars`);
   });
 
   test('the free-agency line carries the real deadline in UK local time', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    // 2026-08-21T17:30Z is 18:30 BST — the line must show local, not raw UTC.
     assert.match(message, /Free agents are up for grabs until the GW1 deadline, Fri 21 Aug, 18:30\./);
     assert.doesNotMatch(message, /17:30/, 'raw UTC would read an hour early during BST');
   });
