@@ -8,32 +8,44 @@ import {
   missingWeeks,
   pickleEntryIdForGw
 } from './pickle.js';
+import { monospaceTable } from './table.js';
 
 // WhatsApp markup: *bold*, _italic_, ~strike~
 const b = (s) => `*${s}*`;
 const i = (s) => `_${s}_`;
 
+/** "Team Name (XX)" — the short identifier used inside monospace tables. */
+function shortLabel(managersByEntryId, entryId) {
+  const m = managersByEntryId.get(Number(entryId));
+  return m ? `${m.teamName} (${m.initials})` : `#${entryId}`;
+}
+
 /**
- * Season table only: a real aligned table in a monospace block, so
+ * Short manager identifier for table cells, e.g. "Mæts back on Semenyo (HJ)".
+ *
+ * Deliberately NOT the "*Team*, Manager Name" of managerDisplay: inside a
+ * table there's one row per item rather than one per manager, so the full
+ * name blows the width out. Exported so src/draft.js's waiver tables use the
+ * identical identifier to the season table.
+ */
+export function managerShortLabel(config) {
+  const managersByEntryId = new Map((config?.managers ?? []).map((m) => [m.entryId, m]));
+  return (entryId) => shortLabel(managersByEntryId, entryId);
+}
+
+/**
+ * Season table: a real aligned table in a monospace block, so
  * Telegram/WhatsApp render it with a fixed-width font. Team name + initials
  * (not the full manager name) — column widths are computed fresh from
  * that week's actual longest name and widest points value, never hardcoded.
  */
 function seasonTableBlock(table, managersByEntryId) {
-  const rows = table.map((r, idx) => {
-    const m = managersByEntryId.get(Number(r.entryId));
-    const label = m ? `${m.teamName} (${m.initials})` : `#${r.entryId}`;
-    return { rank: idx + 1, label, points: String(r.points) };
-  });
-
-  const nameWidth = Math.max(...rows.map((r) => r.label.length));
-  const pointsWidth = Math.max(...rows.map((r) => r.points.length));
-
-  const lines = rows.map(
-    (r) => `${r.rank}. ${r.label.padEnd(nameWidth)} ${r.points.padStart(pointsWidth)}`
-  );
-
-  return ['```', ...lines, '```'].join('\n');
+  const rows = table.map((r, idx) => [
+    `${idx + 1}.`,
+    shortLabel(managersByEntryId, r.entryId),
+    String(r.points)
+  ]);
+  return monospaceTable(rows, { align: ['left', 'left', 'right'] });
 }
 
 /**

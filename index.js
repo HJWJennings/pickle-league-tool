@@ -7,7 +7,7 @@ import {
   getTransactions,
   getTrades
 } from './src/fpl.js';
-import { buildMessage, managerDisplay } from './src/message.js';
+import { buildMessage, managerShortLabel } from './src/message.js';
 import {
   missingWeeks,
   validatePickleHistory,
@@ -21,7 +21,11 @@ import {
   tradeReport,
   buildUnrecognizedAlert
 } from './src/draft.js';
-import { gameweekInWaiverWindow, gameweekInDeadlineWindow } from './src/deadlines.js';
+import {
+  gameweekInWaiverWindow,
+  gameweekInDeadlineWindow,
+  gameweekDeadline
+} from './src/deadlines.js';
 import { ledgerCsv } from './src/ledger.js';
 
 const args = new Set(process.argv.slice(2));
@@ -183,9 +187,9 @@ async function runGameweekReport(config, state, game, gw) {
 }
 
 /**
- * Waivers, free agency and trades. All three are SCAFFOLDING: they handle the
- * empty case for real and throw on a populated one, because no populated
- * payload has ever been observed. See src/draft.js.
+ * Waivers, free agency and trades. Confirmed waiver shapes (kind 'w' with
+ * result 'a' or 'do') are formatted for real; anything else is alerted on
+ * once and marked handled rather than thrown. See src/draft.js.
  *
  * The cron fires hourly; these time-window guards are what stop the two
  * scheduled messages attempting a send on all 24 ticks. The
@@ -195,7 +199,7 @@ async function runGameweekReport(config, state, game, gw) {
 async function runDraftTasks(config, state) {
   const now = new Date();
   const { events, elements } = await getBootstrap();
-  const display = managerDisplay(config);
+  const shortLabel = managerShortLabel(config);
 
   /**
    * Unrecognized records are reported ONCE and then marked handled, keyed by
@@ -244,7 +248,11 @@ async function runDraftTasks(config, state) {
   } else {
     console.log(`In GW${waiverGw} waiver-results window.`);
     const payload = await getTransactions(config.endpoints.transactions);
-    const { message, unrecognized } = waiverReport(payload, waiverGw, { elements, display });
+    const { message, unrecognized } = waiverReport(payload, waiverGw, {
+      elements,
+      label: shortLabel,
+      deadline: gameweekDeadline(events, waiverGw)
+    });
 
     if (message) {
       await sendMessage(message, () => {

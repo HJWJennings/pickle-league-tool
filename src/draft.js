@@ -4,10 +4,10 @@
  * PARTIALLY CONFIRMED. A transaction record looks like:
  *   { added, element_in, element_out, entry, event, id, index, kind,
  *     priority, result }
- * ...but only ONE combination is confirmed: kind === 'w' && result === 'a',
- * a successful waiver claim. Every other kind/result value — the presumed
- * 'f' for free agents, whatever a failed claim reports, anything else — is
- * still unseen, and trades have no confirmed populated shape at all.
+ * ...of which two combinations are confirmed against real GW1 data:
+ * kind 'w' with result 'a' (accepted) and with result 'do' (denied). Every
+ * other kind/result value — the presumed 'f' for free agents, anything else
+ * — is still unseen, and trades have no confirmed populated shape at all.
  *
  * So this file splits the world in two:
  *   - CONFIRMED shapes are parsed and formatted for real.
@@ -22,13 +22,29 @@
  * Pure: these take already-fetched data and return strings/objects. No I/O.
  */
 
+import { monospaceTable } from './table.js';
+import { formatUkDeadline } from './deadlines.js';
+
 // WhatsApp markup: *bold*, _italic_
 const b = (s) => `*${s}*`;
 const i = (s) => `_${s}_`;
 
-/** The one confirmed transaction combination: a successful waiver claim. */
+/**
+ * Confirmed transaction values, all against real GW1 2026/27 data:
+ *   kind 'w'    — a waiver claim
+ *   result 'a'  — accepted (9 real records, cross-checked against the
+ *                 league's own results table)
+ *   result 'do' — denied (3 real records, same cross-check). In all three,
+ *                 the claim's element_out had already been used as the
+ *                 element_out of an EARLIER accepted claim by the same
+ *                 manager, so the player was no longer theirs to drop.
+ *
+ * What the letters "do" abbreviate is not documented anywhere; only the
+ * meaning is confirmed, so nothing here expands it.
+ */
 const KIND_WAIVER = 'w';
 const RESULT_ACCEPTED = 'a';
+const RESULT_DENIED = 'do';
 
 /**
  * config.endpoints holds the two URLs verbatim as confirmed against the live
@@ -64,14 +80,14 @@ export function playerName(elements, id) {
 }
 
 /**
- * Split one gameweek's transactions into confirmed waiver claims and
- * everything else.
+ * Split one gameweek's transactions into accepted claims, denied claims,
+ * and everything else.
  *
- * A record is only treated as a claim when it matches the confirmed shape
- * exactly: kind 'w', result 'a', and the three ids needed to describe it
- * (entry, element_in, element_out) all present. A kind 'w'/result 'a'
- * record missing any of those is a variant nobody has seen, so it goes in
- * `unrecognized` too rather than being rendered with a hole in it.
+ * A record is only classified when it matches a confirmed shape exactly:
+ * kind 'w', a confirmed result, and the three ids needed to describe it
+ * (entry, element_in, element_out) all present. A record missing any of
+ * those is a variant nobody has seen, so it goes in `unrecognized` rather
+ * than being rendered with a hole in it.
  *
  * Records for other gameweeks are not this week's business and are ignored;
  * a record with no `event` at all is unrecognized, so it can't vanish.
@@ -79,6 +95,7 @@ export function playerName(elements, id) {
 export function classifyTransactions(payload, gw) {
   const all = payload?.transactions ?? [];
   const claims = [];
+  const denied = [];
   const unrecognized = [];
 
   for (const t of all) {
@@ -88,28 +105,18 @@ export function classifyTransactions(payload, gw) {
     }
     if (Number(t.event) !== Number(gw)) continue; // another gameweek's batch
 
-    const isConfirmedClaim =
+    const describable =
       t.kind === KIND_WAIVER &&
-      t.result === RESULT_ACCEPTED &&
       t.entry != null &&
       t.element_in != null &&
       t.element_out != null;
 
-    if (isConfirmedClaim) claims.push(t);
+    if (describable && t.result === RESULT_ACCEPTED) claims.push(t);
+    else if (describable && t.result === RESULT_DENIED) denied.push(t);
     else unrecognized.push(t);
   }
 
-  return { claims, unrecognized };
-}
-
-/** Stable per-manager grouping, in the order the API listed the claims. */
-function groupByEntry(claims) {
-  const byEntry = new Map();
-  for (const c of claims) {
-    if (!byEntry.has(c.entry)) byEntry.set(c.entry, []);
-    byEntry.get(c.entry).push(c);
-  }
-  return byEntry;
+  return { claims, denied, unrecognized };
 }
 
 /**
@@ -123,10 +130,41 @@ function groupByEntry(claims) {
  *     the alert is honest; a confident "nothing happened" would not be.
  *   - unrecognized is the raw records for the caller to alert on once.
  */
-export function waiverReport(payload, gw, { elements = [], display = (e) => `#${e}` } = {}) {
-  const { claims, unrecognized } = classifyTransactions(payload, gw);
+export function waiverReport(
+  payload,
+  gw,
+  { elements = [], label = (e) => `#${e}`, deadline = null } = {}
+) {
+  const { claims, denied, unrecognized } = classifyTransactions(payload, gw);
 
-  if (claims.length === 0) {
+  /**
+   * One row per claim — deliberately NOT merged per manager. Two claims by
+   * the same manager are two separate transactions and get two rows, so the
+   * In/Out columns stay meaningful.
+   */
+  const table = (records) =>
+    monospaceTable(
+      [
+        ['Manager', 'In', 'Out'],
+        ...records.map((r) => [
+          label(r.entry),
+          playerName(elements, r.element_in),
+          playerName(elements, r.element_out)
+        ])
+      ],
+      { align: ['left', 'left', 'left'] }
+    );
+
+  // Free agency opens once waivers have run and stays open until the
+  // gameweek deadline — worth saying every week, deadline included.
+  const freeAgentLine = () => {
+    const when = formatUkDeadline(deadline);
+    return when
+      ? `Free agents are up for grabs until the GW${gw} deadline, ${when}.`
+      : 'Free agents are up for grabs until the gameweek deadline.';
+  };
+
+  if (claims.length === 0 && denied.length === 0) {
     const message =
       unrecognized.length > 0
         ? null
@@ -134,18 +172,31 @@ export function waiverReport(payload, gw, { elements = [], display = (e) => `#${
             b(`🥒 WAIVERS — GW${gw}`),
             '',
             'No waivers processed this week.',
-            i('Nobody put a claim in, or none of them went through.')
+            i('Nobody put a claim in, or none of them went through.'),
+            '',
+            freeAgentLine()
           ].join('\n');
     return { message, unrecognized };
   }
 
   const out = [b(`🥒 WAIVERS — GW${gw}`), ''];
-  for (const [entry, entryClaims] of groupByEntry(claims)) {
-    const moves = entryClaims
-      .map((c) => `${playerName(elements, c.element_in)} for ${playerName(elements, c.element_out)}`)
-      .join(', ');
-    out.push(`• ${display(entry)} claimed ${moves}`);
+
+  if (claims.length) {
+    out.push(table(claims));
+  } else {
+    out.push(i('No claims went through this week.'));
   }
+
+  // Denied claims are worth showing — missing out is half the fun. The API
+  // gives no reason field, so none is invented here.
+  if (denied.length) {
+    out.push('');
+    out.push(b('Missed out'));
+    out.push(table(denied));
+  }
+
+  out.push('');
+  out.push(freeAgentLine());
 
   return { message: out.join('\n'), unrecognized };
 }
@@ -155,9 +206,9 @@ export function waiverReport(payload, gw, { elements = [], display = (e) => `#${
  *
  * Free-agency moves are assumed to arrive on the SAME /transactions endpoint
  * as waivers. The presumed 'f' kind is still unconfirmed, so nothing here is
- * formatted: confirmed waiver records are skipped (the waiver message
- * already reported those), and everything else for this gameweek lands in
- * `unrecognized` for a raw alert.
+ * formatted: confirmed waiver records — accepted and denied alike — are
+ * skipped (the waiver message already reported those), and everything else
+ * for this gameweek lands in `unrecognized` for a raw alert.
  *
  * When the remaining kinds are confirmed, this is where the real formatting
  * goes — and the "no free-agency moves" line below becomes trustworthy
