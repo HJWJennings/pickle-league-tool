@@ -191,33 +191,50 @@ A transaction record:
   "event": 4, "id": 77, "index": 0, "kind": "w", "priority": 1, "result": "a" }
 ```
 
-**Only `kind: "w"` + `result: "a"` is confirmed** — a successful waiver claim.
+Confirmed values, all cross-checked against the league's own GW1 2026/27
+results table (workflow run #5):
+
+| Field | Value | Meaning | Samples |
+|---|---|---|---|
+| `kind` | `"w"` | waiver claim | 12 |
+| `result` | `"a"` | accepted | 9 |
+| `result` | `"do"` | denied | 3 |
+
 Player names come from bootstrap-static's `elements[]`, matched on `id`, shown
 via `web_name` (confirmed: id 1 = "Raya").
 
-Everything else is still unseen: the presumed `"f"` kind for free agents,
-whatever a failed claim reports in `result`, and any populated trade record at
-all.
+In all three real `"do"` records the claim's `element_out` had already been
+used as the `element_out` of an *earlier accepted claim by the same manager*
+— the player was no longer theirs to drop. That matches the league table's
+"player out not available". **The API carries no reason field**, so the
+message never states one; what the letters `"do"` abbreviate isn't documented
+anywhere either, and nothing in the code expands it.
+
+Still unseen: the presumed `"f"` kind for free agents, any other `result`
+value, and any populated trade record at all.
 
 ### The unrecognized bucket — a stopgap, not a finished design
 
-`classifyTransactions` splits each gameweek's batch in two: records matching
-the confirmed shape exactly, and everything else. Confirmed records are
-formatted for the group. **Everything else is never formatted** — it goes to
-Harry as a raw-payload alert, once, and is then marked handled.
+`classifyTransactions` splits each gameweek's batch three ways: accepted
+claims, denied claims, and everything else. The first two are formatted for
+the group (denied under a "Missed out" heading — missing out is half the fun).
+**Everything else is never formatted** — it goes to Harry as a raw-payload
+alert, once, and is then marked handled.
 
-A `kind: "w"`/`result: "a"` record missing `entry`, `element_in` or
-`element_out` counts as unrecognized too: a variant nobody has seen is not
-worth rendering with a hole in it.
+A `kind: "w"` record missing `entry`, `element_in` or `element_out` counts as
+unrecognized whatever its `result`: a variant nobody has seen is not worth
+rendering with a hole in it.
 
 **This is a stopgap pending confirmation of the remaining kind/result
 values.** When they're confirmed, add the real handling in `src/draft.js` and
-the bucket shrinks. Do not instead invent field names to make the bucket
-empty.
+the bucket shrinks — that is exactly how `result: "do"` got implemented: the
+bucket alerted on three real records, they were cross-checked against the
+league's results table, and only then were they parsed. Do not instead invent
+field names to make the bucket empty.
 
 | Message | Fires | Guard in `state.json` | Status |
 |---|---|---|---|
-| Waiver results | ~1h after the waiver deadline | `lastWaiverGw` | **kind `w`/result `a` parsed for real**; anything else alerts |
+| Waiver results | ~1h after the waiver deadline | `lastWaiverGw` | **kind `w`, results `a` and `do` parsed for real**; anything else alerts |
 | Free-agency results | at the gameweek deadline | `lastFreeAgencyGw` | no confirmed shape — empty case only, anything else alerts |
 | Trade detection | every hourly tick, no window | `announcedTradeIds` | no confirmed shape — silent when quiet, new trade alerts |
 

@@ -51,8 +51,32 @@ const REAL_CLAIM = {
 const ELEMENTS = [
   { id: 1, web_name: 'Raya' },
   { id: 490, web_name: 'Semenyo' },
-  { id: 193, web_name: 'Sels' }
+  { id: 193, web_name: 'Sels' },
+  // Real ids from the GW1 denied records below; names from the league's table.
+  { id: 69, web_name: 'Scott' },
+  { id: 371, web_name: 'Gravenberch' }
 ];
+
+/**
+ * CONFIRMED fixture: a real DENIED claim, verbatim from the GW1 2026/27 run
+ * (workflow run #5). Cross-checked against the league's own results table:
+ * entry 1931 is Harry Jennings, and this is his "Scott for Gravenberch —
+ * Denied (player out not available)" row. Gravenberch had already been used
+ * as the element_out of his earlier ACCEPTED "Kluivert for Gravenberch"
+ * claim, so he was no longer there to drop.
+ */
+const REAL_DENIED = {
+  added: '2026-08-20T17:29:59.122187Z',
+  element_in: 69,
+  element_out: 371,
+  entry: 1931,
+  event: 1,
+  id: 778485,
+  index: 12,
+  kind: 'w',
+  priority: 3,
+  result: 'do'
+};
 
 const NO_TRANSACTIONS = { transactions: [] };
 const NO_TRADES = { trades: [] };
@@ -116,11 +140,40 @@ describe('transaction classification', () => {
     assert.deepEqual(unrecognized, [freeAgent]);
   });
 
-  test('an unconfirmed result (e.g. a failed claim) is unrecognized', () => {
-    const failed = { ...REAL_CLAIM, id: 80, result: 'r' };
-    const { claims, unrecognized } = classifyTransactions({ transactions: [failed] }, 4);
+  test('CONFIRMED result "do" is a denied claim, not unrecognized', () => {
+    const { claims, denied, unrecognized } = classifyTransactions(
+      { transactions: [REAL_DENIED] },
+      1
+    );
     assert.equal(claims.length, 0);
-    assert.deepEqual(unrecognized, [failed]);
+    assert.deepEqual(denied, [REAL_DENIED]);
+    assert.equal(unrecognized.length, 0);
+  });
+
+  test('accepted and denied are separated within one gameweek batch', () => {
+    const accepted = { ...REAL_CLAIM, event: 1 };
+    const { claims, denied, unrecognized } = classifyTransactions(
+      { transactions: [accepted, REAL_DENIED] },
+      1
+    );
+    assert.deepEqual(claims, [accepted]);
+    assert.deepEqual(denied, [REAL_DENIED]);
+    assert.equal(unrecognized.length, 0);
+  });
+
+  test('a still-unconfirmed result value is unrecognized', () => {
+    const unknown = { ...REAL_CLAIM, id: 80, result: 'zz' };
+    const { claims, denied, unrecognized } = classifyTransactions({ transactions: [unknown] }, 4);
+    assert.equal(claims.length, 0);
+    assert.equal(denied.length, 0);
+    assert.deepEqual(unrecognized, [unknown]);
+  });
+
+  test('a denied record missing an id field is unrecognized, not rendered with a hole', () => {
+    const partial = { ...REAL_DENIED, element_out: null };
+    const { denied, unrecognized } = classifyTransactions({ transactions: [partial] }, 1);
+    assert.equal(denied.length, 0);
+    assert.equal(unrecognized.length, 1);
   });
 
   test('a w/a record missing an id field is unrecognized, not rendered with a hole', () => {
@@ -139,9 +192,10 @@ describe('transaction classification', () => {
   });
 
   test('empty and missing payloads classify as nothing at all', () => {
-    assert.deepEqual(classifyTransactions(NO_TRANSACTIONS, 4), { claims: [], unrecognized: [] });
-    assert.deepEqual(classifyTransactions({}, 4), { claims: [], unrecognized: [] });
-    assert.deepEqual(classifyTransactions(undefined, 4), { claims: [], unrecognized: [] });
+    const empty = { claims: [], denied: [], unrecognized: [] };
+    assert.deepEqual(classifyTransactions(NO_TRANSACTIONS, 4), empty);
+    assert.deepEqual(classifyTransactions({}, 4), empty);
+    assert.deepEqual(classifyTransactions(undefined, 4), empty);
   });
 });
 
@@ -221,6 +275,48 @@ describe('waiver results message', () => {
     assert.match(message, /claimed Semenyo for Sels/, 'the confirmed claim still reports');
     assert.deepEqual(unrecognized, [freeAgent], 'the unconfirmed one is set aside');
     assert.doesNotMatch(message, /"kind"/, 'no raw record leaks into the group message');
+  });
+
+  test('CONFIRMED denied fixture renders in a "Missed out" section', () => {
+    const { message, unrecognized } = waiverReport({ transactions: [REAL_DENIED] }, 1, {
+      elements: ELEMENTS,
+      display
+    });
+    assert.match(message, /\*Missed out\*/);
+    // entry 1931 is "Mæts back on Semenyo" / Harry Jennings in the real config.
+    assert.match(message, /• \*Mæts back on Semenyo\*, Harry Jennings missed Scott for Gravenberch/);
+    assert.deepEqual(unrecognized, [], 'result "do" is confirmed — never bucketed');
+  });
+
+  test('accepted and denied appear in separate sections of one message', () => {
+    const accepted = { ...REAL_CLAIM, event: 1 };
+    const { message } = waiverReport({ transactions: [accepted, REAL_DENIED] }, 1, {
+      elements: ELEMENTS,
+      display
+    });
+    const acceptedAt = message.indexOf('claimed Semenyo for Sels');
+    const headingAt = message.indexOf('*Missed out*');
+    const deniedAt = message.indexOf('missed Scott for Gravenberch');
+    assert.ok(acceptedAt > -1 && headingAt > -1 && deniedAt > -1, 'all three present');
+    assert.ok(acceptedAt < headingAt, 'accepted claims come first');
+    assert.ok(headingAt < deniedAt, 'denied claims sit under the heading');
+  });
+
+  test('denied-only week still sends, and says no claims went through', () => {
+    const { message } = waiverReport({ transactions: [REAL_DENIED] }, 1, {
+      elements: ELEMENTS,
+      display
+    });
+    assert.match(message, /No claims went through this week\./);
+    assert.doesNotMatch(message, /No waivers processed this week/);
+  });
+
+  test('no reason for a denial is invented — the API has no reason field', () => {
+    const { message } = waiverReport({ transactions: [REAL_DENIED] }, 1, {
+      elements: ELEMENTS,
+      display
+    });
+    assert.doesNotMatch(message, /not available|unavailable|because|reason/i);
   });
 
   test('NO message when the only records are unrecognized — "no waivers" would be a lie', () => {
