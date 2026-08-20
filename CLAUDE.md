@@ -123,15 +123,18 @@ Which field gets used depends on the line, and all three are load-bearing:
 
 | Where | Shows | Helper |
 |---|---|---|
-| Waiver lines, fines, "Running low", draws | `initials` — "HJ" | `managerInitials` |
+| Waiver lines, fines, the pickle line, "Running low", draws | `initials` — "HJ" | `managerInitials` |
 | Ranked lines, top/worst, MOTM | `managerName` — "Harry Jennings" | `managerName` |
-| The pickle's own line only | `teamName` + initials — "*Draft Idiot* (RT)" | inline |
 
-`teamName` now appears in exactly one place: the pickle line. Everywhere else
-it was too wide, and it drags `æ` and a curly apostrophe into lines that have
-to hold their shape (see **Why nothing is a table**). Both helpers fall back to
-a bare `#entryId` if a manager is missing from the array, so a gap degrades one
-word rather than crashing the run.
+**`teamName` is no longer rendered anywhere.** It stays in `config.managers`
+as reference data — handy when scanning the config by eye, and the obvious
+thing to restore from if a team name is ever wanted again — but no message
+prints it. It was consistently too wide, and it drags `æ` and a curly
+apostrophe into lines that have to hold their shape (see **Why nothing is a
+table**). A test asserts no configured team name reaches the message.
+
+Both helpers fall back to a bare `#entryId` if a manager is missing from the
+array, so a gap degrades one word rather than crashing the run.
 
 **`ledger.csv` deliberately uses none of this.** `src/ledger.js` reads
 `state.managers` — the directory `index.js` refreshes from the live API's

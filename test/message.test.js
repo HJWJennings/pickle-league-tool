@@ -56,10 +56,11 @@ describe('message shape', () => {
     assert.match(buildMessage(s, config(), 1), /^\*🥒 PICKLE LEAGUE — GW1 RESULTS\*/);
   });
 
-  test('the pickle line is "*Team* (II)", not the manager name', () => {
+  test('the pickle line is "*The Pickle (II)*" — no team name, no manager name', () => {
     const msg = buildMessage(s, config(), 1);
-    assert.match(msg, /\*The Pickle\* \(\*Pickle FC\* \(CO\)\) scored \*50\*/);
-    assert.doesNotMatch(msg, /Pickle FC\*, Cormac/, 'old bold/comma form is gone');
+    assert.match(msg, /\*The Pickle \(CO\)\* scored \*50\*/);
+    assert.doesNotMatch(msg, /Pickle FC/, 'team name is gone from the message entirely');
+    assert.doesNotMatch(msg, /The Pickle \(CO\)\* \(/, 'no leftover bracket from the old form');
   });
 
   test('fines are listed by initials alone', () => {
@@ -71,8 +72,8 @@ describe('message shape', () => {
 
   test('top and worst are "points - manager", points first', () => {
     const msg = buildMessage(s, config(), 1);
-    assert.match(msg, /🏆 Top: 60 - Alice/);
-    assert.match(msg, /💩 Worst: 40 - Bob/);
+    assert.match(msg, /🏆 Top: \*60\* - Alice/);
+    assert.match(msg, /💩 Worst: \*40\* - Bob/);
   });
 
   test('the jar line reads "Pot:"', () => {
@@ -110,9 +111,9 @@ describe('season table', () => {
     // one blank line, then the ranking
     assert.equal(lines[start + 1], '');
     assert.deepEqual(lines.slice(start + 2, start + 5), [
-      '1. 120 - Alice',
-      '2. 100 - Cormac',
-      '3. 80 - Bob'
+      '1. *120* - Alice',
+      '2. *100* - Cormac',
+      '3. *80* - Bob'
     ]);
   });
 
@@ -140,21 +141,21 @@ describe('manager of the month', () => {
   test('a complete month announces "MOTM", not "Manager of the Month"', () => {
     const msg = buildMessage(s, config({ motmMonths: [{ label: 'August', fromGw: 1, toGw: 1 }] }), 1);
     assert.match(msg, /\*🏅 August MOTM\*/);
-    assert.match(msg, /\*Alice - 60 pts\*/);
+    assert.match(msg, /Alice - \*60 pts\*/);
     assert.doesNotMatch(msg, /Manager of the Month/);
   });
 
   test('a shared month names every winner and says the prize splits', () => {
     const tied = state({ 1: { 1: 50, 2: 50, [PICKLE]: 40 } });
     const msg = buildMessage(tied, config({ motmMonths: [{ label: 'August', fromGw: 1, toGw: 1 }] }), 1);
-    assert.match(msg, /Alice & Bob - 50 pts each/);
+    assert.match(msg, /Alice & Bob - \*50 pts each\*/);
     assert.match(msg, /_Shared, prize splits\._/);
   });
 
   test('an incomplete month shows the race in the same ranked form', () => {
     const msg = buildMessage(s, config({ motmMonths: [{ label: 'August', fromGw: 1, toGw: 2 }] }), 1);
     assert.match(msg, /\*August race \(GW1–2\)\*/);
-    assert.match(msg, /1\. 60 - Alice/);
+    assert.match(msg, /1\. \*60\* - Alice/);
   });
 });
 
@@ -181,16 +182,16 @@ describe('the real config.json', () => {
 
   test('renders real managers by name, with no team names in the ranking', () => {
     const msg = buildMessage(realState, realConfig, 1);
-    assert.match(msg, /🏆 Top: 90 - Harry Jennings/);
-    assert.match(msg, /💩 Worst: 30 - Rob Wiseman/);
-    assert.match(msg, /1\. 90 - Harry Jennings/);
+    assert.match(msg, /🏆 Top: \*90\* - Harry Jennings/);
+    assert.match(msg, /💩 Worst: \*30\* - Rob Wiseman/);
+    assert.match(msg, /1\. \*90\* - Harry Jennings/);
     assert.doesNotMatch(msg, /Mæts back on Semenyo/, 'team names no longer appear in prose');
     assert.doesNotMatch(msg, /She’s an Eze Lover/);
   });
 
-  test('the pickle line still shows the team name, bolded, with initials', () => {
+  test('the pickle line shows initials only', () => {
     const msg = buildMessage(realState, realConfig, 1);
-    assert.match(msg, /\*The Pickle\* \(\*Better Call Tzol\* \(CR\)\) scored \*50\*/);
+    assert.match(msg, /\*The Pickle \(CR\)\* scored \*50\*/);
   });
 
   test('fines list the real initials', () => {
@@ -198,16 +199,13 @@ describe('the real config.json', () => {
     assert.match(msg, /• RW — 30 pts/);
   });
 
-  test('a non-ASCII team name still survives where it is shown', () => {
-    // Only the pickle line carries a team name now, so point the history at
-    // the manager whose team name has the curly apostrophe.
-    const cfg = { ...realConfig, pickle: { history: [{ fromGw: 1, entryId: 197504 }] } };
-    const msg = buildMessage(realState, cfg, 1);
-    assert.match(msg, /\*She’s an Eze Lover\* \(RW\)/);
-    assert.equal(
-      realConfig.managers.find((m) => m.entryId === 197504).teamName.includes('’'),
-      true,
-      'precondition: the real config really does hold U+2019'
-    );
+  test('no team name reaches the message at all', () => {
+    // teamName is still in config.managers for reference, but nothing renders
+    // it any more — which is what keeps `æ` and a curly apostrophe out of
+    // lines that have to hold their shape.
+    const msg = buildMessage(realState, realConfig, 1);
+    for (const m of realConfig.managers) {
+      assert.ok(!msg.includes(m.teamName), `${m.teamName} must not appear`);
+    }
   });
 });

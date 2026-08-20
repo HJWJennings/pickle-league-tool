@@ -49,14 +49,6 @@ export function buildMessage(state, config, gw) {
 
   const initials = managerInitials(config);
   const name = managerName(config);
-  const byEntryId = new Map((config.managers ?? []).map((m) => [m.entryId, m]));
-
-  /** The pickle's own line: "*Draft Idiot* (RT)". */
-  const teamWithInitials = (entryId) => {
-    const m = byEntryId.get(Number(entryId));
-    return m ? `${b(m.teamName)} (${m.initials})` : `#${entryId}`;
-  };
-
   /**
    * Every ranked line is "points - manager", points first.
    *
@@ -66,7 +58,7 @@ export function buildMessage(state, config, gw) {
    * would not survive Telegram anyway (no parse_mode; see the waiver lines in
    * src/draft.js for the full reasoning).
    */
-  const ranked = (rows) => rows.map((r, idx) => `${idx + 1}. ${r.points} - ${name(r.entryId)}`);
+  const ranked = (rows) => rows.map((r, idx) => `${idx + 1}. ${b(r.points)} - ${name(r.entryId)}`);
 
   const { amount, floatStart, entryFee, lowBalanceWarning } = config.fine;
   const pickleId = pickleEntryIdForGw(config.pickle.history, gw);
@@ -78,7 +70,7 @@ export function buildMessage(state, config, gw) {
   out.push('');
 
   // --- The pickle line -------------------------------------------------
-  out.push(`${b('The Pickle')} (${teamWithInitials(pickleId)}) scored ${b(picklePoints)}`);
+  out.push(`${b(`The Pickle (${initials(pickleId)})`)} scored ${b(picklePoints)}`);
 
   if (fined.length === 0) {
     out.push('');
@@ -98,9 +90,9 @@ export function buildMessage(state, config, gw) {
   // --- Week's stats ----------------------------------------------------
   out.push('');
   out.push(b('This week'));
-  out.push(`🏆 Top: ${stats.top.points} - ${name(stats.top.entryId)}`);
-  out.push(`💩 Worst: ${stats.bottom.points} - ${name(stats.bottom.entryId)}`);
-  out.push(`📊 League average: ${stats.average}`);
+  out.push(`🏆 Top: ${b(stats.top.points)} - ${name(stats.top.entryId)}`);
+  out.push(`💩 Worst: ${b(stats.bottom.points)} - ${name(stats.bottom.entryId)}`);
+  out.push(`📊 League average: ${b(stats.average)}`);
   if (stats.bestEver?.gw === gw) {
     out.push(i(`Best score of the season so far 🔥`));
   }
@@ -116,8 +108,8 @@ export function buildMessage(state, config, gw) {
       out.push(b(`🏅 ${month.label} MOTM`));
       out.push(
         motm.shared
-          ? `${b(`${names} - ${motm.points} pts each`)} ${i('Shared, prize splits.')}`
-          : b(`${names} - ${motm.points} pts`)
+          ? `${names} - ${b(`${motm.points} pts each`)} ${i('Shared, prize splits.')}`
+          : `${names} - ${b(`${motm.points} pts`)}`
       );
     } else {
       out.push(b(`${month.label} race (GW${month.fromGw}–${month.toGw})`));
