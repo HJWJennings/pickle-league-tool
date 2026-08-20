@@ -1,10 +1,14 @@
 {
   "season": "2026/27",
   "lastReportedGw": null,
-  "lastWaiverGw": null,
+  "lastWaiverGw": 1,
   "lastFreeAgencyGw": null,
   "announcedTradeIds": [],
-  "unrecognizedTransactionsAlerted": [],
+  "unrecognizedTransactionsAlerted": [
+    "283995",
+    "415815",
+    "778485"
+  ],
   "managers": {},
   "gameweeks": {}
 }
