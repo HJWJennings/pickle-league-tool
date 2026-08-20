@@ -12,6 +12,7 @@
   "fine": {
     "amount": 1,
     "floatStart": 10,
+    "entryFee": 20,
     "lowBalanceWarning": 3
   },
 

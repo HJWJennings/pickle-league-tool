@@ -35,6 +35,36 @@ maintenance", not for engineering elegance.
 - Double gameweeks are **not** normalised. Planning for them is part of the
   game.
 
+## Pickle jar vs. float (`config.fine`) — two separate, non-interacting figures
+
+`config.fine` holds three distinct numbers. Don't conflate them:
+
+- **`amount`** (£1) — the per-fine charge.
+- **`floatStart`** (£10) — each manager's pre-paid personal float. Decremented
+  once per fine *for that manager*. Shown two places only: the message's
+  "Running low" warning and every row of `ledger.csv`'s `Balance` column.
+- **`entryFee`** (£20) — each manager's one-off entry fee, paid once at the
+  start of the season into the shared pickle jar.
+
+The weekly message's **"Pickle jar"** total is the shared pot, not anyone's
+personal float:
+
+```
+jarTotal = (entryFee × expectedManagers) + (fines so far × amount)
+```
+
+Computed fresh in `src/message.js` on every run — from `config.fine`,
+`config.expectedManagers`, and `state.json`'s full gameweek history via
+`fineLedger` — never stored or incremented in place, same recompute-not-cache
+rule as everything else. `expectedManagers` (not a hardcoded headcount) means
+the jar's starting total stays correct if the roster size ever changes.
+
+`floatStart` and `entryFee` never appear in each other's calculation.
+`ledger.js`'s per-manager balance logic (`floatStart - fines × amount`) is
+untouched by the jar total and stays the authority on individual balances;
+the jar total is untouched by any individual's float and stays the authority
+on the shared pot.
+
 ## Pickle history (`config.pickle.history`)
 
 Who counts as "the pickle" is not a single value — it's an array of

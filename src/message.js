@@ -20,7 +20,7 @@ export function buildMessage(state, config, gw) {
   const stats = weeklyStats(state, gw);
   if (!stats) return `No data recorded for GW${gw}.`;
 
-  const { amount, floatStart, lowBalanceWarning } = config.fine;
+  const { amount, floatStart, entryFee, lowBalanceWarning } = config.fine;
   const pickleId = pickleEntryIdForGw(config.pickle.history, gw);
   const { picklePoints, fined, drew } = finesForWeek(state, gw, pickleId, amount);
   const ledger = fineLedger(state, config.pickle.history, amount);
@@ -85,16 +85,21 @@ export function buildMessage(state, config, gw) {
     out.push(`${idx + 1}. ${name(r.entryId)} — ${r.points}`);
   });
 
-  // --- Float balances --------------------------------------------------
+  // --- Jar total & float balances ---------------------------------------
   out.push('');
-  out.push(b('Pickle jar float'));
+  out.push(b('Pickle jar'));
   const balances = stats.table
     .map((r) => ({ entryId: r.entryId, left: floatStart - (ledger.get(r.entryId) ?? 0) }))
     .filter((x) => x.entryId !== pickleId)
     .sort((a, x) => a.left - x.left);
 
-  const collected = [...ledger.values()].reduce((s, v) => s + v, 0);
-  out.push(`Total in the jar: £${collected}`);
+  // Jar starts at the entry pool (entryFee × every manager, pickle included)
+  // and grows £1 per fine — recomputed fresh from state.json every run, same
+  // as everything else derived. Not to be confused with the £10 float above,
+  // which is a separate per-manager figure.
+  const jarStart = entryFee * config.expectedManagers;
+  const finesCollected = [...ledger.values()].reduce((s, v) => s + v, 0);
+  out.push(`Total in the jar: £${jarStart + finesCollected}`);
 
   const low = balances.filter((x) => x.left <= lowBalanceWarning);
   if (low.length) {

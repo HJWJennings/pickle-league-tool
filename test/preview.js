@@ -29,7 +29,7 @@ const config = {
   leagueId: 999999,
   expectedManagers: MANAGERS.length,
   pickle: { history: [{ fromGw: 1, entryId: ID[PICKLE], label: PICKLE }] },
-  fine: { amount: 1, floatStart: 10, lowBalanceWarning: 3 },
+  fine: { amount: 1, floatStart: 10, entryFee: 20, lowBalanceWarning: 3 },
   motm: { tieRule: 'split' },
   // Small placeholder ranges to fit this preview's synthetic 2-3 week
   // scenarios — not the real season-long config.motmMonths.
