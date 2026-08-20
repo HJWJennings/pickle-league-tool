@@ -1,6 +1,9 @@
 {
   "season": "2026/27",
   "lastReportedGw": null,
+  "lastWaiverGw": null,
+  "lastFreeAgencyGw": null,
+  "announcedTradeIds": [],
   "managers": {},
   "gameweeks": {}
 }

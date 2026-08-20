@@ -3,6 +3,11 @@
 
   "expectedManagers": 9,
 
+  "endpoints": {
+    "transactions": "https://draft.premierleague.com/api/draft/league/812/transactions",
+    "trades": "https://draft.premierleague.com/api/draft/league/812/trades"
+  },
+
   "pickle": {
     "history": [
       { "fromGw": 1, "entryId": 2105, "label": "Cormac" }

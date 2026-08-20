@@ -2,10 +2,16 @@ name: Pickle League weekly
 
 on:
   schedule:
-    # Daily 08:00 UTC — late enough that bonus points have settled;
-    # the finished/lastReportedGw guards in index.js keep this to one send
-    # per gameweek even though the cron now fires every day.
-    - cron: '0 8 * * *'
+    # Hourly. Three independent jobs share this one schedule, each with its
+    # own guards in index.js — the cron itself decides nothing:
+    #   - gameweek scores: the finished/lastReportedGw guards, unchanged from
+    #     when this ran daily. Still one send per gameweek, once settled.
+    #   - waiver + free-agency results: time-window guards around the waiver
+    #     deadline (gameweek deadline - 24h) and the deadline itself, plus
+    #     lastWaiverGw/lastFreeAgencyGw so one window sends once.
+    #   - trade check: every tick, no window — trades complete at arbitrary
+    #     times. Silent unless something new turns up.
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:

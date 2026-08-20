@@ -1,11 +1,15 @@
 const BASE = 'https://draft.premierleague.com/api';
 
-async function get(path) {
-  const res = await fetch(`${BASE}${path}`, {
+async function getUrl(url) {
+  const res = await fetch(url, {
     headers: { 'User-Agent': 'pickle-league/1.0' }
   });
-  if (!res.ok) throw new Error(`GET ${path} -> ${res.status} ${res.statusText}`);
+  if (!res.ok) throw new Error(`GET ${url} -> ${res.status} ${res.statusText}`);
   return res.json();
+}
+
+async function get(path) {
+  return getUrl(`${BASE}${path}`);
 }
 
 /**
@@ -72,4 +76,42 @@ export async function getLeague(leagueId) {
 export async function getEntryHistory(entryId) {
   const data = await get(`/entry/${entryId}/history`);
   return (data.history ?? []).map((h) => ({ event: h.event, points: h.points }));
+}
+
+/**
+ * Gameweek list, for deadline maths.
+ *
+ * `deadline_time` on each event is CONFIRMED (GW1 = 2026-08-21T17:30:00Z).
+ * VERIFY: the container. Some FPL endpoints return `events` as a bare array,
+ * others wrap it as `events.data`. Both are unwrapped here; anything else
+ * throws rather than silently yielding an empty list, which would leave every
+ * time-window guard permanently closed and the new messages silently dead.
+ */
+export async function getEvents() {
+  const data = await get('/bootstrap-static');
+  const events = Array.isArray(data.events) ? data.events : data.events?.data;
+  if (!Array.isArray(events)) {
+    throw new Error(
+      `bootstrap-static returned no usable events array ` +
+        `(got ${JSON.stringify(Object.keys(data ?? {}))}). Check the shape in src/fpl.js.`
+    );
+  }
+  return events;
+}
+
+/**
+ * Waiver + free-agency transactions.
+ * ⚠️ Only ever observed as `{transactions: []}`. The populated shape is
+ * unconfirmed — src/draft.js throws rather than formatting a guess.
+ */
+export async function getTransactions(url) {
+  return getUrl(url);
+}
+
+/**
+ * Trades.
+ * ⚠️ Only ever observed as `{trades: []}`. Same caveat as above.
+ */
+export async function getTrades(url) {
+  return getUrl(url);
 }
