@@ -261,7 +261,7 @@ describe('waiver results message', () => {
       label
     });
     // entry 190207 is NS. element_out 193 = Sels leaves, element_in 490 = Semenyo arrives.
-    assert.ok(message.includes('NS\tSels → Semenyo'), 'out first, then arrow, then in');
+    assert.ok(message.includes('NS | Sels → Semenyo'), 'out first, then arrow, then in');
     assert.deepEqual(unrecognized, []);
   });
 
@@ -288,7 +288,7 @@ describe('waiver results message', () => {
       label
     });
     assert.match(message, /\*Missed out\*/);
-    assert.ok(message.includes('HJ\tGravenberch → Scott'));
+    assert.ok(message.includes('HJ | Gravenberch → Scott'));
     assert.deepEqual(unrecognized, [], 'result "do" is confirmed — never bucketed');
   });
 
@@ -325,34 +325,35 @@ describe('waiver lines — the real GW1 2026/27 batch', () => {
 
   test('renders every one of the 9 accepted and 3 denied claims', () => {
     const { message, unrecognized } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    const claimLines = message.split('\n').filter((l) => l.includes('\t'));
+    const claimLines = message.split('\n').filter((l) => l.includes(' | '));
     assert.equal(claimLines.length, 12);
     assert.deepEqual(unrecognized, [], 'both results are confirmed — nothing bucketed');
   });
 
   test('one line per claim: a manager who claimed twice gets two lines', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    const hj = message.split('\n').filter((l) => l.startsWith('HJ\t'));
+    const hj = message.split('\n').filter((l) => l.startsWith('HJ |'));
     assert.deepEqual(hj, [
-      'HJ\tGravenberch → Kluivert',
-      'HJ\tHall → Konsa',
-      'HJ\tGravenberch → Scott'
+      'HJ | Gravenberch → Kluivert',
+      'HJ | Hall → Konsa',
+      'HJ | Gravenberch → Scott'
     ]);
   });
 
-  test('every line is initials, one tab, then exactly one arrow', () => {
+  test('every line is initials, one pipe separator, then exactly one arrow', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    for (const line of message.split('\n').filter((l) => l.includes('\t'))) {
-      assert.match(line, /^[A-Z]{2}\t[^\t]+ → [^\t]+$/, line);
-      assert.equal(line.split('\t').length, 2, 'exactly one tab');
+    for (const line of message.split('\n').filter((l) => l.includes(' | '))) {
+      assert.match(line, /^[A-Z]{2} \| [^|]+ → [^|]+$/, line);
+      assert.equal(line.split(' | ').length, 2, 'exactly one separator');
       assert.equal(line.split(' → ').length, 2, 'exactly one arrow');
+      assert.doesNotMatch(line, /\t/, 'no tabs — the pipe replaced it');
     }
   });
 
   test('needs no padding: the identifier is two chars on every single line', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
     const widths = new Set(
-      message.split('\n').filter((l) => l.includes('\t')).map((l) => l.split('\t')[0].length)
+      message.split('\n').filter((l) => l.includes(' | ')).map((l) => l.split(' | ')[0].length)
     );
     assert.deepEqual([...widths], [2], 'uniform width is what makes this hold shape');
   });
@@ -360,7 +361,7 @@ describe('waiver lines — the real GW1 2026/27 batch', () => {
   test('lines stay short enough not to wrap on a phone', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
     const longest = Math.max(
-      ...message.split('\n').filter((l) => l.includes('\t')).map((l) => l.length)
+      ...message.split('\n').filter((l) => l.includes(' | ')).map((l) => l.length)
     );
     assert.ok(longest <= 32, `longest claim line is ${longest} chars`);
   });

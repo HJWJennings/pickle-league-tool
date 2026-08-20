@@ -140,21 +140,25 @@ export function waiverReport(
    * One line per claim — deliberately NOT merged per manager. Two claims by
    * the same manager are two separate transactions and get two lines.
    *
-   * Shape is "II<tab>Out → In": initials, a tab, then the player leaving,
-   * an arrow, and the player arriving. Reads in the direction the move
-   * actually happened.
+   * Shape is "II | Out → In": initials, a pipe, then the player leaving, an
+   * arrow, and the player arriving. Reads in the direction the move actually
+   * happened.
+   *
+   * The separator is a literal pipe rather than a tab because a tab's width
+   * is up to the client, and inconsistent width is exactly what broke every
+   * earlier attempt at this message. A pipe occupies one character
+   * everywhere.
    *
    * No monospace block and no padding, on purpose. The Telegram send sets no
    * parse_mode, so a ``` block would arrive as literal backticks rendered in
-   * a proportional font, where any padding is decorative at best — which is
-   * why the previous aligned table came apart on a phone. Initials are
-   * uniformly two characters, so these lines hold their shape with nothing
-   * but a tab, in Telegram and in WhatsApp alike.
+   * a proportional font, where padding is decorative at best. Initials are
+   * uniformly two characters, so these lines hold their shape unaided in
+   * Telegram and WhatsApp alike.
    */
   const lines = (records) =>
     records.map(
       (r) =>
-        `${label(r.entry)}\t${playerName(elements, r.element_out)} → ` +
+        `${label(r.entry)} | ${playerName(elements, r.element_out)} → ` +
         `${playerName(elements, r.element_in)}`
     );
 
