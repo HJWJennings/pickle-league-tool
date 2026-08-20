@@ -217,7 +217,10 @@ value, and any populated trade record at all.
 
 `classifyTransactions` splits each gameweek's batch three ways: accepted
 claims, denied claims, and everything else. The first two are formatted for
-the group (denied under a "Missed out" heading — missing out is half the fun).
+the group as two monospace tables (Manager | In | Out), denied under a
+"Missed out" heading — missing out is half the fun. One row per claim, not
+merged per manager, so a manager who claimed twice gets two rows. The message
+ends with the free-agency deadline in UK local time.
 **Everything else is never formatted** — it goes to Harry as a raw-payload
 alert, once, and is then marked handled.
 
@@ -380,6 +383,18 @@ source of a subtle bug.
 Uses WhatsApp markup (`*bold*`). The Telegram send deliberately sets **no**
 `parse_mode`, so asterisks arrive literally and render as bold when pasted into
 WhatsApp. Don't "fix" this by adding Markdown parse mode.
+
+Aligned tables (the season table, and the waiver message's two) go through
+`monospaceTable` in `src/table.js` — one padding/width implementation, wrapped
+in a ``` block so both clients use a fixed-width font. Widths always come from
+the rows handed in, never hardcoded. Inside a table a manager is
+`"Team Name (XX)"` (`managerShortLabel`), not the wider `"*Team*, Manager"`
+(`managerDisplay`) used in prose lines — a table has one row per item rather
+than one per manager, so the full name blows the width out.
+
+Times shown to the group are UK local via `formatUkDeadline`
+(`Intl` + `Europe/London`), so they track BST/GMT rather than reading an hour
+early for most of the season.
 
 ## Testing
 

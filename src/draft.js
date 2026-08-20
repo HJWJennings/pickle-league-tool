@@ -4,10 +4,10 @@
  * PARTIALLY CONFIRMED. A transaction record looks like:
  *   { added, element_in, element_out, entry, event, id, index, kind,
  *     priority, result }
- * ...but only ONE combination is confirmed: kind === 'w' && result === 'a',
- * a successful waiver claim. Every other kind/result value — the presumed
- * 'f' for free agents, whatever a failed claim reports, anything else — is
- * still unseen, and trades have no confirmed populated shape at all.
+ * ...of which two combinations are confirmed against real GW1 data:
+ * kind 'w' with result 'a' (accepted) and with result 'do' (denied). Every
+ * other kind/result value — the presumed 'f' for free agents, anything else
+ * — is still unseen, and trades have no confirmed populated shape at all.
  *
  * So this file splits the world in two:
  *   - CONFIRMED shapes are parsed and formatted for real.
@@ -21,6 +21,9 @@
  *
  * Pure: these take already-fetched data and return strings/objects. No I/O.
  */
+
+import { monospaceTable } from './table.js';
+import { formatUkDeadline } from './deadlines.js';
 
 // WhatsApp markup: *bold*, _italic_
 const b = (s) => `*${s}*`;
@@ -116,16 +119,6 @@ export function classifyTransactions(payload, gw) {
   return { claims, denied, unrecognized };
 }
 
-/** Stable per-manager grouping, in the order the API listed the claims. */
-function groupByEntry(claims) {
-  const byEntry = new Map();
-  for (const c of claims) {
-    if (!byEntry.has(c.entry)) byEntry.set(c.entry, []);
-    byEntry.get(c.entry).push(c);
-  }
-  return byEntry;
-}
-
 /**
  * Weekly waiver results, sent ~1h after the waiver deadline.
  *
@@ -137,8 +130,39 @@ function groupByEntry(claims) {
  *     the alert is honest; a confident "nothing happened" would not be.
  *   - unrecognized is the raw records for the caller to alert on once.
  */
-export function waiverReport(payload, gw, { elements = [], display = (e) => `#${e}` } = {}) {
+export function waiverReport(
+  payload,
+  gw,
+  { elements = [], label = (e) => `#${e}`, deadline = null } = {}
+) {
   const { claims, denied, unrecognized } = classifyTransactions(payload, gw);
+
+  /**
+   * One row per claim — deliberately NOT merged per manager. Two claims by
+   * the same manager are two separate transactions and get two rows, so the
+   * In/Out columns stay meaningful.
+   */
+  const table = (records) =>
+    monospaceTable(
+      [
+        ['Manager', 'In', 'Out'],
+        ...records.map((r) => [
+          label(r.entry),
+          playerName(elements, r.element_in),
+          playerName(elements, r.element_out)
+        ])
+      ],
+      { align: ['left', 'left', 'left'] }
+    );
+
+  // Free agency opens once waivers have run and stays open until the
+  // gameweek deadline — worth saying every week, deadline included.
+  const freeAgentLine = () => {
+    const when = formatUkDeadline(deadline);
+    return when
+      ? `Free agents are up for grabs until the GW${gw} deadline, ${when}.`
+      : 'Free agents are up for grabs until the gameweek deadline.';
+  };
 
   if (claims.length === 0 && denied.length === 0) {
     const message =
@@ -148,24 +172,17 @@ export function waiverReport(payload, gw, { elements = [], display = (e) => `#${
             b(`🥒 WAIVERS — GW${gw}`),
             '',
             'No waivers processed this week.',
-            i('Nobody put a claim in, or none of them went through.')
+            i('Nobody put a claim in, or none of them went through.'),
+            '',
+            freeAgentLine()
           ].join('\n');
     return { message, unrecognized };
   }
 
-  /** "• *Team*, Manager {verb} Raya for Sels, Saka for Foden" */
-  const lines = (records, verb) =>
-    [...groupByEntry(records)].map(([entry, rs]) => {
-      const moves = rs
-        .map((r) => `${playerName(elements, r.element_in)} for ${playerName(elements, r.element_out)}`)
-        .join(', ');
-      return `• ${display(entry)} ${verb} ${moves}`;
-    });
-
   const out = [b(`🥒 WAIVERS — GW${gw}`), ''];
 
   if (claims.length) {
-    out.push(...lines(claims, 'claimed'));
+    out.push(table(claims));
   } else {
     out.push(i('No claims went through this week.'));
   }
@@ -175,8 +192,11 @@ export function waiverReport(payload, gw, { elements = [], display = (e) => `#${
   if (denied.length) {
     out.push('');
     out.push(b('Missed out'));
-    out.push(...lines(denied, 'missed'));
+    out.push(table(denied));
   }
+
+  out.push('');
+  out.push(freeAgentLine());
 
   return { message: out.join('\n'), unrecognized };
 }

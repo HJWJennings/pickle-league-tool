@@ -10,6 +10,27 @@
 const HOUR_MS = 60 * 60 * 1000;
 export const WAIVER_LEAD_MS = 24 * HOUR_MS;
 
+/**
+ * A deadline rendered for humans in UK local time, e.g. "Fri 21 Aug, 18:30".
+ *
+ * deadline_time is UTC; the league is in the UK, so a raw UTC time reads an
+ * hour early for the two-thirds of the season on BST. Intl with an explicit
+ * Europe/London zone gets the BST/GMT switch right without a dependency or a
+ * hand-rolled DST table.
+ */
+export function formatUkDeadline(at) {
+  if (at == null) return null;
+  return new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Europe/London'
+  }).format(at);
+}
+
 /** The raw deadline_time string for a gameweek, or null if not in the list. */
 export function deadlineTimeForGw(events, gw) {
   const event = (events ?? []).find((e) => Number(e.id) === Number(gw));
