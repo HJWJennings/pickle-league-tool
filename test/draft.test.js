@@ -27,11 +27,11 @@ import {
   tradeReport,
   buildUnrecognizedAlert
 } from '../src/draft.js';
-import { managerShortLabel } from '../src/message.js';
+import { managerName } from '../src/message.js';
 
 const realConfig = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
-/** The short "Team Name (XX)" identifier used inside the waiver tables. */
-const label = managerShortLabel(realConfig);
+/** Manager name only — the identifier used inside the waiver tables. */
+const label = managerName(realConfig);
 
 // CONFIRMED fixture: a real successful waiver claim, exactly as returned.
 const REAL_CLAIM = {
@@ -263,7 +263,7 @@ describe('waiver results message', () => {
     assert.match(message, /```/, 'wrapped in a monospace block');
     assert.match(message, /Manager\s+In\s+Out/, 'has a header row');
     // entry 190207 is "Eze Platter (NS)" in the real config.
-    assert.match(message, /Eze Platter \(NS\)\s+Semenyo\s+Sels/);
+    assert.match(message, /Nat Shaughnessy\s+Semenyo\s+Sels/);
     assert.doesNotMatch(message, /• /, 'bullets replaced by the table');
     assert.deepEqual(unrecognized, []);
   });
@@ -274,17 +274,17 @@ describe('waiver results message', () => {
       label
     });
     assert.match(message, /\*Missed out\*/);
-    assert.match(message, /Mæts back on Semenyo \(HJ\)\s+Scott\s+Gravenberch/);
+    assert.match(message, /Harry Jennings\s+Scott\s+Gravenberch/);
     assert.deepEqual(unrecognized, [], 'result "do" is confirmed — never bucketed');
   });
 
-  test('uses the short "Team (XX)" identifier, not the full "Team, Manager Name"', () => {
+  test('uses the manager name alone — no team name, which ran too wide', () => {
     const { message } = waiverReport({ transactions: [REAL_CLAIM] }, 4, {
       elements: ELEMENTS,
       label
     });
-    assert.match(message, /Eze Platter \(NS\)/);
-    assert.doesNotMatch(message, /Nat Shaughnessy/, 'full manager name is too wide for a table');
+    assert.match(message, /Nat Shaughnessy/);
+    assert.doesNotMatch(message, /Eze Platter/, 'team name must not appear in the table');
   });
 
   test('no reason for a denial is invented — the API has no reason field', () => {
@@ -320,7 +320,7 @@ describe('waiver tables — the real GW1 2026/27 batch', () => {
 
   test('one row per claim: managers with two claims get two rows, not one merged row', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    const rows = message.split('\n').filter((l) => /\(HJ\)/.test(l));
+    const rows = message.split('\n').filter((l) => l.startsWith('Harry Jennings'));
     // Harry had two accepted claims and one denied — three separate rows.
     assert.equal(rows.length, 3);
     assert.match(rows[0], /Kluivert/);
@@ -374,18 +374,18 @@ describe('waiver tables — the real GW1 2026/27 batch', () => {
     const widest = Math.max(
       ...GW1_TRANSACTIONS.filter((t) => t.result === 'a').map((t) => label(t.entry).length)
     );
-    assert.equal(widest, 25);
-    const row = message.split('\n').find((l) => l.startsWith('Pedro Porro for life (DC)'));
+    assert.equal(widest, 16, '"Theo Pennefather" is the longest manager name');
+    const row = message.split('\n').find((l) => l.startsWith('David Cole'));
     assert.equal(row.indexOf('Amad'), widest + 1);
 
-    // Drop BOTH 25-char managers and every remaining row must narrow.
-    const shorter = GW1_TRANSACTIONS.filter((t) => t.entry !== 207411 && t.entry !== 1931);
+    // Drop the longest name and every remaining row must narrow.
+    const shorter = GW1_TRANSACTIONS.filter((t) => t.entry !== 201762);
     const narrower = waiverReport({ transactions: shorter }, 1, opts()).message;
-    const before = message.split('\n').find((l) => l.startsWith('Mr Brobbey (TP)   '));
-    const after = narrower.split('\n').find((l) => l.startsWith('Mr Brobbey (TP)'));
+    const before = message.split('\n').find((l) => l.startsWith('Nat Shaughnessy'));
+    const after = narrower.split('\n').find((l) => l.startsWith('Nat Shaughnessy'));
     assert.ok(
-      after.indexOf('Madjo') < before.indexOf('Madjo'),
-      'removing the longest names must pull every later column leftwards'
+      after.indexOf('Wood') < before.indexOf('Wood'),
+      'removing the longest name must pull every later column leftwards'
     );
   });
 
