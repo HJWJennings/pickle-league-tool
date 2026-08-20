@@ -198,7 +198,7 @@ async function runGameweekReport(config, state, game, gw) {
  */
 async function runDraftTasks(config, state) {
   const now = new Date();
-  const { events, elements, teams } = await getBootstrap();
+  const { events, elements } = await getBootstrap();
   const label = managerInitials(config);
 
   /**
@@ -250,7 +250,6 @@ async function runDraftTasks(config, state) {
     const payload = await getTransactions(config.endpoints.transactions);
     const { message, unrecognized } = waiverReport(payload, waiverGw, {
       elements,
-      teams,
       label,
       deadline: gameweekDeadline(events, waiverGw)
     });

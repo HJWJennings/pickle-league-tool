@@ -22,8 +22,6 @@ import {
   playerName,
   classifyTransactions,
   waiverReport,
-  clubShortName,
-  playerLabel,
   freeAgencyReport,
   newTradeIds,
   tradeReport,
@@ -96,17 +94,6 @@ const NO_TRADES = { trades: [] };
  * since the accepted records were already formatted in the run log.
  */
 const GW1_DEADLINE = '2026-08-21T17:30:00Z';
-
-/**
- * CONFIRMED from the live bootstrap-static: teams[] is a bare array of 20,
- * each { id, short_name, ... }, and elements[].team is that numeric id.
- */
-const GW1_TEAMS = [
-  { id: 1, short_name: 'ARS' }, { id: 2, short_name: 'AVL' },
-  { id: 3, short_name: 'BOU' }, { id: 5, short_name: 'BHA' },
-  { id: 8, short_name: 'CRY' }, { id: 12, short_name: 'IPS' },
-  { id: 14, short_name: 'LIV' }, { id: 17, short_name: 'NEW' }
-];
 
 // team ids for 316/138/211/54/69/371 are REAL (from the live diagnostic);
 // the rest are stand-ins, since only the denied records were shown raw.
@@ -341,14 +328,9 @@ describe('waiver results message', () => {
 });
 
 describe('waiver lines — the real GW1 2026/27 batch', () => {
-  const opts = () => ({
-    elements: GW1_ELEMENTS,
-    teams: GW1_TEAMS,
-    label,
-    deadline: new Date(GW1_DEADLINE)
-  });
+  const opts = () => ({ elements: GW1_ELEMENTS, label, deadline: new Date(GW1_DEADLINE) });
 
-  test("processing order and club codes match the league's own results table", () => {
+  test("processing order matches the league's own results table", () => {
     // Order is the API's `index`, cross-checked 12/12 against the league
     // table. The fixture is in payload order (grouped by manager), so this
     // only passes if the sort actually ran.
@@ -357,19 +339,19 @@ describe('waiver lines — the real GW1 2026/27 batch', () => {
 
     assert.deepEqual(claimed, [
       // accepted, index 1-8 then 11
-      'RW | Welbeck (BHA) → David (ARS)',
-      'NS | Wright (BOU) → Wood (NEW)',
-      'HJ | Gravenberch (LIV) → Kluivert (BOU)',
-      'FM | Gomes (AVL) → Ngumoha (LIV)',
-      'TP | Kostoulas (BHA) → Madjo (CRY)',
-      'DC | Neto (AVL) → Amad (ARS)',
-      'RW | Bijol (NEW) → White (ARS)',
-      'HJ | Hall (NEW) → Konsa (AVL)',
-      'TP | Martinez (AVL) → Horníček (BHA)',
+      'RW | Welbeck → David',
+      'NS | Wright → Wood',
+      'HJ | Gravenberch → Kluivert',
+      'FM | Gomes → Ngumoha',
+      'TP | Kostoulas → Madjo',
+      'DC | Neto → Amad',
+      'RW | Bijol → White',
+      'HJ | Hall → Konsa',
+      'TP | Martinez → Horníček',
       // denied, index 9, 10, 12
-      'FM | Gomes (AVL) → Yeremy (CRY)',
-      'TP | Kostoulas (BHA) → Emersonn (IPS)',
-      'HJ | Gravenberch (LIV) → Scott (BOU)'
+      'FM | Gomes → Yeremy',
+      'TP | Kostoulas → Emersonn',
+      'HJ | Gravenberch → Scott'
     ]);
   });
 
@@ -379,9 +361,9 @@ describe('waiver lines — the real GW1 2026/27 batch', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
     const all = message.split('\n').filter((l) => l.includes(' | '));
     for (const [ok, failed] of [
-      ['FM | Gomes (AVL) → Ngumoha (LIV)', 'FM | Gomes (AVL) → Yeremy (CRY)'],
-      ['TP | Kostoulas (BHA) → Madjo (CRY)', 'TP | Kostoulas (BHA) → Emersonn (IPS)'],
-      ['HJ | Gravenberch (LIV) → Kluivert (BOU)', 'HJ | Gravenberch (LIV) → Scott (BOU)']
+      ['FM | Gomes → Ngumoha', 'FM | Gomes → Yeremy'],
+      ['TP | Kostoulas → Madjo', 'TP | Kostoulas → Emersonn'],
+      ['HJ | Gravenberch → Kluivert', 'HJ | Gravenberch → Scott']
     ]) {
       assert.ok(all.indexOf(ok) < all.indexOf(failed), `${ok} must precede ${failed}`);
     }
@@ -398,12 +380,21 @@ describe('waiver lines — the real GW1 2026/27 batch', () => {
     assert.equal(message.split('\n').filter((l) => l.startsWith('HJ |')).length, 3);
   });
 
-  test('every line is initials, one pipe, one arrow, and two club codes', () => {
+  test('every line is initials, one pipe, then exactly one arrow', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
     for (const line of message.split('\n').filter((l) => l.includes(' | '))) {
-      assert.match(line, /^[A-Z]{2} \| .+ \([A-Z]{3}\) → .+ \([A-Z]{3}\)$/, line);
+      assert.match(line, /^[A-Z]{2} \| [^|]+ → [^|]+$/, line);
       assert.doesNotMatch(line, /\t/, 'no tabs — the pipe replaced it');
+      assert.doesNotMatch(line, /\([A-Z]{3}\)/, 'club codes removed — too wide for WhatsApp');
     }
+  });
+
+  test('lines stay short enough not to wrap on a phone', () => {
+    const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
+    const longest = Math.max(
+      ...message.split('\n').filter((l) => l.includes(' | ')).map((l) => l.length)
+    );
+    assert.ok(longest <= 32, `longest claim line is ${longest} chars`);
   });
 
   test('needs no padding: the identifier is two chars on every line', () => {
@@ -423,37 +414,9 @@ describe('waiver lines — the real GW1 2026/27 batch', () => {
   test('the free-agency line still renders when no deadline is available', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, {
       elements: GW1_ELEMENTS,
-      teams: GW1_TEAMS,
       label
     });
     assert.match(message, /Free agents are up for grabs until the gameweek deadline\./);
-  });
-});
-
-describe('club codes', () => {
-  test('CONFIRMED: team 14 is LIV, team 2 is AVL', () => {
-    assert.equal(clubShortName(GW1_TEAMS, 14), 'LIV');
-    assert.equal(clubShortName(GW1_TEAMS, 2), 'AVL');
-  });
-
-  test('matches across string/number team ids', () => {
-    assert.equal(clubShortName(GW1_TEAMS, '14'), 'LIV');
-  });
-
-  test('playerLabel combines name and club', () => {
-    assert.equal(playerLabel(GW1_ELEMENTS, GW1_TEAMS, 911), 'Konsa (AVL)');
-    assert.equal(playerLabel(GW1_ELEMENTS, GW1_TEAMS, 912), 'Hall (NEW)');
-  });
-
-  test('degrades to the bare name rather than an empty bracket', () => {
-    assert.equal(clubShortName(GW1_TEAMS, 999), null);
-    const orphan = [{ id: 1, web_name: 'Raya', team: 999 }];
-    assert.equal(playerLabel(orphan, GW1_TEAMS, 1), 'Raya');
-    assert.equal(playerLabel(orphan, [], 1), 'Raya');
-  });
-
-  test('an unknown player still degrades to #id', () => {
-    assert.equal(playerLabel(GW1_ELEMENTS, GW1_TEAMS, 99999), '#99999');
   });
 });
 

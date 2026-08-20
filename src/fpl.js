@@ -107,11 +107,7 @@ export async function getBootstrap() {
   const keys = Object.keys(data ?? {});
   return {
     events: unwrapList(data?.events, 'events', keys),
-    elements: unwrapList(data?.elements, 'elements', keys),
-    // CONFIRMED: a bare array of 20, each { code, id, name, pulse_id,
-    // short_name }, and elements[].team holds the numeric id. short_name is
-    // the three-letter club code (LIV, AVL, ...).
-    teams: unwrapList(data?.teams, 'teams', keys)
+    elements: unwrapList(data?.elements, 'elements', keys)
   };
 }
 

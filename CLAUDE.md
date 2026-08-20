@@ -217,10 +217,21 @@ value, and any populated trade record at all.
 
 `classifyTransactions` splits each gameweek's batch three ways: accepted
 claims, denied claims, and everything else. The first two are formatted for
-the group as two monospace tables (Manager | In | Out), denied under a
-"Missed out" heading — missing out is half the fun. One row per claim, not
-merged per manager, so a manager who claimed twice gets two rows. The message
-ends with the free-agency deadline in UK local time.
+the group, denied under a "Missed out" heading — missing out is half the fun.
+One line per claim, not merged per manager, so a manager who claimed twice
+gets two lines. The message ends with the free-agency deadline in UK local
+time.
+
+Each line is `II | Out → In` — initials, a pipe, the player leaving, an arrow,
+the player arriving. See **Why the waiver message is plain lines** below for
+why it is not a table.
+
+Claims are sorted by the record's `index`, which is CONFIRMED to be the order
+the waivers were actually processed in (12/12 against the league's own GW1
+results table). The payload itself arrives grouped by manager, so without the
+sort the order means nothing. `priority` is the waiver round — everyone's
+first claim, then their second — which is why order carries the story: a
+manager's later claim fails on a player their own earlier claim already took.
 **Everything else is never formatted** — it goes to Harry as a raw-payload
 alert, once, and is then marked handled.
 
@@ -384,13 +395,35 @@ Uses WhatsApp markup (`*bold*`). The Telegram send deliberately sets **no**
 `parse_mode`, so asterisks arrive literally and render as bold when pasted into
 WhatsApp. Don't "fix" this by adding Markdown parse mode.
 
-Aligned tables (the season table, and the waiver message's two) go through
-`monospaceTable` in `src/table.js` — one padding/width implementation, wrapped
-in a ``` block so both clients use a fixed-width font. Widths always come from
-the rows handed in, never hardcoded. Inside a table a manager is
-`"Team Name (XX)"` (`managerShortLabel`), not the wider `"*Team*, Manager"`
-(`managerDisplay`) used in prose lines — a table has one row per item rather
-than one per manager, so the full name blows the width out.
+The season table goes through `monospaceTable` in `src/table.js`, wrapped in a
+``` block. Widths always come from the rows handed in, never hardcoded, and
+cells are normalised to NFC first — `.length` counts UTF-16 code units, so a
+decomposed name like "Horníček" measures 10 while it displays as 8, which
+silently knocks every other row in that column out of line. Inside that table
+a manager is `"Team Name (XX)"` (`managerShortLabel`), not the wider
+`"*Team*, Manager"` (`managerDisplay`) used in prose lines.
+
+### Why the waiver message is plain lines, not a table
+
+The Telegram send sets **no `parse_mode`** (see above), so a ``` block arrives
+in Telegram as three literal backticks and the text renders in Telegram's
+proportional font. Column padding therefore does nothing there — it only takes
+effect once the message is pasted into WhatsApp. An aligned waiver table was
+tried and repeatedly came apart on a phone for exactly this reason; widening
+or narrowing the columns could never have fixed it.
+
+The `II | Out → In` line needs no padding at all: every manager's initials are
+exactly two characters, so the lines hold their shape in either client. A
+literal pipe rather than a tab, because a tab's rendered width is up to the
+client.
+
+Club codes were tried too — `Hall (NEW) → Konsa (AVL)` — and removed. They
+read well in Telegram but pushed the longest line from 25 to 39 characters,
+which wraps in WhatsApp, and WhatsApp is where the group actually reads it.
+bootstrap-static carries them if that tradeoff is ever worth revisiting:
+`teams[]` is a bare array of 20, each `{ code, id, name, pulse_id,
+short_name }`, joined via `elements[].team`; every `short_name` is three
+letters.
 
 Times shown to the group are UK local via `formatUkDeadline`
 (`Intl` + `Europe/London`), so they track BST/GMT rather than reading an hour

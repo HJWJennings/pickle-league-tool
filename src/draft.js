@@ -79,28 +79,6 @@ export function playerName(elements, id) {
 }
 
 /**
- * Three-letter club code for a team id, e.g. 14 -> "LIV".
- * CONFIRMED: bootstrap-static returns teams[] as { id, short_name, ... } and
- * elements[].team is that numeric id. Every short_name is three letters.
- */
-export function clubShortName(teams, teamId) {
-  const t = (teams ?? []).find((x) => Number(x?.id) === Number(teamId));
-  return t?.short_name ?? null;
-}
-
-/**
- * A player as shown in the message: "Konsa (AVL)".
- * Degrades to the bare name if the club can't be resolved, rather than
- * printing an empty bracket — same principle as the #id fallbacks.
- */
-export function playerLabel(elements, teams, id) {
-  const el = (elements ?? []).find((e) => Number(e?.id) === Number(id));
-  const name = el?.web_name ?? `#${id}`;
-  const club = clubShortName(teams, el?.team);
-  return club ? `${name} (${club})` : name;
-}
-
-/**
  * Split one gameweek's transactions into accepted claims, denied claims,
  * and everything else.
  *
@@ -167,7 +145,7 @@ export function classifyTransactions(payload, gw) {
 export function waiverReport(
   payload,
   gw,
-  { elements = [], teams = [], label = (e) => `#${e}`, deadline = null } = {}
+  { elements = [], label = (e) => `#${e}`, deadline = null } = {}
 ) {
   const { claims, denied, unrecognized } = classifyTransactions(payload, gw);
 
@@ -175,9 +153,15 @@ export function waiverReport(
    * One line per claim — deliberately NOT merged per manager. Two claims by
    * the same manager are two separate transactions and get two lines.
    *
-   * Shape is "II | Out (CLU) → In (CLU)": initials, a pipe, the player
-   * leaving with their club, an arrow, and the player arriving with theirs.
-   * Reads in the direction the move actually happened.
+   * Shape is "II | Out → In": initials, a pipe, then the player leaving, an
+   * arrow, and the player arriving. Reads in the direction the move actually
+   * happened.
+   *
+   * Club codes were tried here and removed: "Hall (NEW) → Konsa (AVL)" read
+   * well in Telegram but pushed the longest line to 39 characters, which
+   * wraps in WhatsApp — and WhatsApp is where the group actually reads it.
+   * bootstrap-static's teams[] carries them ({ id, short_name }, joined via
+   * elements[].team) if that tradeoff is ever worth revisiting.
    *
    * The separator is a literal pipe rather than a tab because a tab's width
    * is up to the client, and inconsistent width is exactly what broke every
@@ -193,8 +177,8 @@ export function waiverReport(
   const lines = (records) =>
     records.map(
       (r) =>
-        `${label(r.entry)} | ${playerLabel(elements, teams, r.element_out)} → ` +
-        `${playerLabel(elements, teams, r.element_in)}`
+        `${label(r.entry)} | ${playerName(elements, r.element_out)} → ` +
+        `${playerName(elements, r.element_in)}`
     );
 
   // Free agency opens once waivers have run and stays open until the
