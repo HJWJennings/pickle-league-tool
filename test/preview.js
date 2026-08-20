@@ -31,10 +31,11 @@ const config = {
   pickle: { history: [{ fromGw: 1, entryId: ID[PICKLE], label: PICKLE }] },
   fine: { amount: 1, floatStart: 10, lowBalanceWarning: 3 },
   motm: { tieRule: 'split' },
-  // Placeholder ranges — replace with your real ones before the season.
-  months: [
-    { name: 'August', from: 1, to: 3 },
-    { name: 'September', from: 4, to: 6 }
+  // Small placeholder ranges to fit this preview's synthetic 2-3 week
+  // scenarios — not the real season-long config.motmMonths.
+  motmMonths: [
+    { label: 'August', fromGw: 1, toGw: 3 },
+    { label: 'September', fromGw: 4, toGw: 6 }
   ]
 };
 

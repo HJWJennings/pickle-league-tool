@@ -78,6 +78,36 @@ yourself, outside the tool.
   history itself, with a clear idea of which already-sent fines and balances
   will change as a result — never as a casual edit.
 
+## MOTM months (`config.motmMonths`)
+
+Manager-of-the-month gameweek ranges live in `config.motmMonths`: an array of
+`{ label, fromGw, toGw }`, sorted and contiguous. The 2026/27 season's real
+ranges, confirmed against the fixture list:
+
+| Month     | GW range |
+|-----------|----------|
+| August    | 1–2      |
+| September | 3–5      |
+| October   | 6–9      |
+| November  | 10–12    |
+| December  | 13–18    |
+| January   | 19–23    |
+| February  | 24–27    |
+| March     | 28–30    |
+| April     | 31–33    |
+| May       | 34–38    |
+
+No special handling around the GW20 mid-season redraft — the January block
+(GW19–23) runs straight through it; a redraft doesn't reset or split a month.
+
+`monthFor`/`monthTable`/`managerOfTheMonth` in `src/pickle.js` read
+`fromGw`/`toGw`/`label` directly — recomputed from `state.json` on every run,
+same as everything else derived. `validateMotmMonths` runs once at startup
+(`index.js`) and throws — doesn't warn — if the array is empty, has a gap or
+an overlap between months, or doesn't cover exactly GW1–38, since a gap would
+silently drop a gameweek from every month's total and an overlap would
+double-count one.
+
 ## Layout
 
 - `index.js` — orchestrator: fetch, sanity-check, record, derive, send
@@ -85,7 +115,7 @@ yourself, outside the tool.
 - `src/pickle.js` — pure logic, no I/O. Easiest place to test changes.
 - `src/message.js` — message formatting
 - `src/ledger.js` — CSV formatting for `ledger.csv`, pure, no I/O
-- `config.json` — league ID, pickle history, month ranges
+- `config.json` — league ID, pickle history, MOTM month ranges
 - `state.json` — written by the bot each week, committed back
 - `ledger.csv` — row-per-manager-per-gameweek fine ledger for manually
   checking the maths (points, pickle's score, fined Y/N, running balance).
@@ -122,7 +152,8 @@ so a dry run will exit early rather than showing a message.
 ## Failure philosophy
 
 The script **throws** on suspicious data — wrong manager count, non-numeric
-points, everyone on zero, pickle not in the league. A crash sends a Telegram
+points, everyone on zero, pickle not in the league, `motmMonths` with a gap,
+overlap, or that doesn't cover exactly GW1–38. A crash sends a Telegram
 alert; a wrong-but-plausible message doesn't. Prefer loud failure over a
 graceful fallback that hides a broken API.
 
@@ -131,4 +162,6 @@ graceful fallback that hides a broken API.
 Entry IDs change every season. Each August: archive `state.json`, reset it,
 set the new `leagueId` and `expectedManagers`, start a fresh
 `pickle.history` with one entry at `fromGw: 1` for the new season's pickle,
-and set month ranges taken from the real gameweek deadlines.
+and replace `motmMonths` with that season's real month/gameweek ranges taken
+from the fixture list (`validateMotmMonths` will refuse to run if the new
+ranges don't cover exactly GW1–38 with no gaps or overlaps).

@@ -1,7 +1,12 @@
 import { readFile, writeFile, appendFile } from 'node:fs/promises';
 import { getGameState, getLeague, getEntryHistory } from './src/fpl.js';
 import { buildMessage } from './src/message.js';
-import { missingWeeks, validatePickleHistory, pickleEntryIdForGw } from './src/pickle.js';
+import {
+  missingWeeks,
+  validatePickleHistory,
+  pickleEntryIdForGw,
+  validateMotmMonths
+} from './src/pickle.js';
 import { ledgerCsv } from './src/ledger.js';
 
 const args = new Set(process.argv.slice(2));
@@ -69,6 +74,7 @@ async function main() {
     throw new Error('Set leagueId in config.json first.');
   }
   validatePickleHistory(config.pickle.history);
+  validateMotmMonths(config.motmMonths);
 
   const game = await getGameState();
   const gw = game.currentEvent;

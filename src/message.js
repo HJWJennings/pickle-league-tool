@@ -57,21 +57,21 @@ export function buildMessage(state, config, gw) {
   }
 
   // --- Month race ------------------------------------------------------
-  const month = monthFor(config.months, gw);
+  const month = monthFor(config.motmMonths, gw);
   if (month) {
     const { table, complete } = monthTable(state, month);
     out.push('');
     if (complete) {
       const motm = managerOfTheMonth(state, month);
       const names = motm.winners.map(who).join(' & ');
-      out.push(b(`🏅 ${month.name} Manager of the Month`));
+      out.push(b(`🏅 ${month.label} Manager of the Month`));
       out.push(
         motm.shared
           ? `${names} — ${motm.points} pts each. ${i('Shared, prize splits.')}`
           : `${names} — ${motm.points} pts`
       );
     } else {
-      out.push(b(`${month.name} race (GW${month.from}–${month.to})`));
+      out.push(b(`${month.label} race (GW${month.fromGw}–${month.toGw})`));
       table.forEach((r, idx) => {
         out.push(`${idx + 1}. ${name(r.entryId)} — ${r.points}`);
       });

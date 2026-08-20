@@ -99,9 +99,42 @@ export function pickleEntryIdForGw(history, gw) {
   return applicable.entryId;
 }
 
+/**
+ * Validates config.motmMonths: sorted by fromGw, contiguous (no gaps or
+ * overlaps), and covering exactly GW1-38 — the fixed length of a Premier
+ * League season. Thrown, not warned: a gap or overlap would silently drop a
+ * gameweek from every month's total, or double-count it, which is exactly
+ * the wrong-but-plausible result this project refuses to produce.
+ */
+export function validateMotmMonths(months) {
+  if (!Array.isArray(months) || months.length === 0) {
+    throw new Error('config.motmMonths is empty — set at least one { label, fromGw, toGw }.');
+  }
+
+  let expectedFrom = 1;
+  for (const m of months) {
+    if (m.toGw < m.fromGw) {
+      throw new Error(`config.motmMonths: ${m.label} has toGw (${m.toGw}) before fromGw (${m.fromGw}).`);
+    }
+    if (m.fromGw !== expectedFrom) {
+      throw new Error(
+        `config.motmMonths has a gap or overlap: expected ${m.label} to start at GW${expectedFrom}, ` +
+          `but it starts at GW${m.fromGw}.`
+      );
+    }
+    expectedFrom = m.toGw + 1;
+  }
+
+  if (expectedFrom - 1 !== 38) {
+    throw new Error(
+      `config.motmMonths must cover exactly GW1-38; it currently covers GW1-${expectedFrom - 1}.`
+    );
+  }
+}
+
 /** Which configured month contains this gameweek. */
 export function monthFor(months, gw) {
-  return months.find((m) => gw >= m.from && gw <= m.to) ?? null;
+  return months.find((m) => gw >= m.fromGw && gw <= m.toGw) ?? null;
 }
 
 /**
@@ -113,7 +146,7 @@ export function monthTable(state, month) {
   const totals = new Map();
   const weeksCounted = [];
 
-  for (let gw = month.from; gw <= month.to; gw++) {
+  for (let gw = month.fromGw; gw <= month.toGw; gw++) {
     const week = state.gameweeks[String(gw)];
     if (!week) continue;
     weeksCounted.push(gw);
@@ -126,7 +159,7 @@ export function monthTable(state, month) {
     .map(([entryId, points]) => ({ entryId, points }))
     .sort((a, b) => b.points - a.points);
 
-  const complete = weeksCounted.length === month.to - month.from + 1;
+  const complete = weeksCounted.length === month.toGw - month.fromGw + 1;
   return { month, table, weeksCounted, complete };
 }
 
@@ -139,7 +172,7 @@ export function managerOfTheMonth(state, month) {
   const winners = table.filter((r) => r.points === top);
 
   return {
-    month: month.name,
+    month: month.label,
     points: top,
     winners: winners.map((w) => w.entryId),
     shared: winners.length > 1,

@@ -9,6 +9,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   recordedWeeks,
@@ -20,8 +21,13 @@ import {
   managerOfTheMonth,
   weeklyStats,
   validatePickleHistory,
-  pickleEntryIdForGw
+  pickleEntryIdForGw,
+  validateMotmMonths
 } from '../src/pickle.js';
+
+// The real config, so the coverage/boundary tests below check what actually
+// ships — not a fixture that could silently drift from it.
+const config = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
 
 const PICKLE = 3; // entry id of the pickle in these fixtures
 const HISTORY = [{ fromGw: 1, entryId: PICKLE }]; // single-entry history wrapping PICKLE
@@ -179,15 +185,15 @@ describe('pickle history', () => {
 
 describe('months', () => {
   const months = [
-    { name: 'August', from: 1, to: 2 },
-    { name: 'September', from: 3, to: 5 }
+    { label: 'August', fromGw: 1, toGw: 2 },
+    { label: 'September', fromGw: 3, toGw: 5 }
   ];
 
   test('maps a gameweek to its month, inclusive at both edges', () => {
-    assert.equal(monthFor(months, 1).name, 'August');
-    assert.equal(monthFor(months, 2).name, 'August');
-    assert.equal(monthFor(months, 3).name, 'September');
-    assert.equal(monthFor(months, 5).name, 'September');
+    assert.equal(monthFor(months, 1).label, 'August');
+    assert.equal(monthFor(months, 2).label, 'August');
+    assert.equal(monthFor(months, 3).label, 'September');
+    assert.equal(monthFor(months, 5).label, 'September');
   });
 
   test('returns null for a gameweek outside every configured range', () => {
@@ -220,7 +226,7 @@ describe('months', () => {
 });
 
 describe('manager of the month', () => {
-  const months = [{ name: 'August', from: 1, to: 2 }];
+  const months = [{ label: 'August', fromGw: 1, toGw: 2 }];
 
   test('single winner', () => {
     const s = state({ 1: { 1: 50, 2: 40 }, 2: { 1: 50, 2: 40 } });
@@ -240,6 +246,54 @@ describe('manager of the month', () => {
     const s = state({ 1: { 1: 45, 2: 45, 3: 45 } , 2: { 1: 45, 2: 45, 3: 45 } });
     const motm = managerOfTheMonth(s, months[0]);
     assert.equal(motm.winners.length, 3);
+  });
+});
+
+describe('motm months validation (config.motmMonths)', () => {
+  test('the real config covers exactly GW1-38 with no gaps or overlaps', () => {
+    assert.doesNotThrow(() => validateMotmMonths(config.motmMonths));
+  });
+
+  test('boundary: GW2 is August, GW3 is September', () => {
+    assert.equal(monthFor(config.motmMonths, 2).label, 'August');
+    assert.equal(monthFor(config.motmMonths, 3).label, 'September');
+  });
+
+  test('boundary: GW18 is December, GW19 is January — no special handling at the GW20 redraft', () => {
+    assert.equal(monthFor(config.motmMonths, 18).label, 'December');
+    assert.equal(monthFor(config.motmMonths, 19).label, 'January');
+    assert.equal(monthFor(config.motmMonths, 20).label, 'January');
+  });
+
+  test('throws on an empty array', () => {
+    assert.throws(() => validateMotmMonths([]));
+    assert.throws(() => validateMotmMonths(undefined));
+  });
+
+  test('throws on a gap between months', () => {
+    const months = [
+      { label: 'August', fromGw: 1, toGw: 2 },
+      { label: 'October', fromGw: 4, toGw: 5 } // GW3 missing
+    ];
+    assert.throws(() => validateMotmMonths(months));
+  });
+
+  test('throws on overlapping months', () => {
+    const months = [
+      { label: 'August', fromGw: 1, toGw: 3 },
+      { label: 'September', fromGw: 3, toGw: 5 } // GW3 double-counted
+    ];
+    assert.throws(() => validateMotmMonths(months));
+  });
+
+  test('throws when coverage falls short of GW38', () => {
+    const months = [{ label: 'August', fromGw: 1, toGw: 30 }];
+    assert.throws(() => validateMotmMonths(months));
+  });
+
+  test('throws when coverage runs past GW38', () => {
+    const months = [{ label: 'August', fromGw: 1, toGw: 40 }];
+    assert.throws(() => validateMotmMonths(months));
   });
 });
 
