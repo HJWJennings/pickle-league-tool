@@ -115,40 +115,36 @@ yourself, outside the tool.
 
 ## Display names (`config.managers`)
 
-The weekly Telegram/WhatsApp message shows each manager as
-`"{teamName} - {managerName}"` (e.g. "Mæts back on Semenyo - Harry Jennings"),
-sourced from `config.managers`: an array of
-`{ entryId, initials, teamName, managerName }`, one entry per manager, keyed
-by the same `entryId` used everywhere else in `config.json` — no separate
-identity system.
+`config.managers` is an array of `{ entryId, initials, teamName, managerName }`,
+one per manager, keyed by the same `entryId` used everywhere else in
+`config.json` — no separate identity system. All nine rows hold real data.
 
-```json
-"managers": [
-  { "entryId": 2105, "initials": "TODO", "teamName": "TODO", "managerName": "TODO" }
-]
-```
+Which field gets used depends on the line, and all three are load-bearing:
 
-`src/message.js` builds an `entryId → record` lookup from `config.managers`
-fresh on every call and falls back to a bare `#entryId` if a manager isn't in
-the array (e.g. an unfilled `TODO` row) — so a missing entry degrades the
-display rather than crashing the run.
+| Where | Shows | Helper |
+|---|---|---|
+| Waiver lines, fines, the pickle line, "Running low", draws | `initials` — "HJ" | `managerInitials` |
+| Ranked lines, top/worst, MOTM | `managerName` — "Harry Jennings" | `managerName` |
 
-**`ledger.csv` deliberately does not use this.** `src/ledger.js` is untouched
-by `config.managers` and keeps reading `state.managers` (the directory
-`index.js` refreshes from the live API's `entry_name`/player name each run)
-for its `Team`/`Manager` columns, exactly as before. Full display names are
-for the group-facing message only; the CSV stays on whatever `state.managers`
-holds and isn't meant to be forwarded to anyone. `config.managers`'s
-`initials` field is there for your own reference when scanning the config by
-eye — nothing in the tool currently reads it.
+**`teamName` is no longer rendered anywhere.** It stays in `config.managers`
+as reference data — handy when scanning the config by eye, and the obvious
+thing to restore from if a team name is ever wanted again — but no message
+prints it. It was consistently too wide, and it drags `æ` and a curly
+apostrophe into lines that have to hold their shape (see **Why nothing is a
+table**). A test asserts no configured team name reaches the message.
 
-Entry IDs change every season (see Season rollover below), so `config.managers`
-needs the same season-start refresh as `pickle.history`. Right now only the
-current pickle's real `entryId` (2105) is known; the other rows are seeded
-with fake negative placeholder IDs and `"TODO"` values — fill both in from a
-`--dry-run`'s output (or the FPL Draft API directly) once the real IDs are
-available. Don't invent names or IDs in the meantime; the `#entryId` fallback
-is the correct behaviour for an unfilled row, not a bug to work around.
+Both helpers fall back to a bare `#entryId` if a manager is missing from the
+array, so a gap degrades one word rather than crashing the run.
+
+**`ledger.csv` deliberately uses none of this.** `src/ledger.js` reads
+`state.managers` — the directory `index.js` refreshes from the live API's
+`entry_name`/player name each run — for its `Team`/`Manager` columns. The CSV
+is for checking the maths by eye, not for forwarding to anyone.
+
+Entry IDs change every season (see Season rollover), so `config.managers` needs
+the same season-start refresh as `pickle.history`. `initials`, `teamName` and
+`managerName` can usually carry over unchanged for people already in the
+league; only the `entryId`s move.
 
 ## MOTM months (`config.motmMonths`)
 
@@ -217,10 +213,21 @@ value, and any populated trade record at all.
 
 `classifyTransactions` splits each gameweek's batch three ways: accepted
 claims, denied claims, and everything else. The first two are formatted for
-the group as two monospace tables (Manager | In | Out), denied under a
-"Missed out" heading — missing out is half the fun. One row per claim, not
-merged per manager, so a manager who claimed twice gets two rows. The message
-ends with the free-agency deadline in UK local time.
+the group, denied under a "Missed out" heading — missing out is half the fun.
+One line per claim, not merged per manager, so a manager who claimed twice
+gets two lines. The message ends with the free-agency deadline in UK local
+time.
+
+Each line is `II | Out → In` — initials, a pipe, the player leaving, an arrow,
+the player arriving. See **Why the waiver message is plain lines** below for
+why it is not a table.
+
+Claims are sorted by the record's `index`, which is CONFIRMED to be the order
+the waivers were actually processed in (12/12 against the league's own GW1
+results table). The payload itself arrives grouped by manager, so without the
+sort the order means nothing. `priority` is the waiver round — everyone's
+first claim, then their second — which is why order carries the story: a
+manager's later claim fails on a player their own earlier claim already took.
 **Everything else is never formatted** — it goes to Harry as a raw-payload
 alert, once, and is then marked handled.
 
@@ -351,7 +358,8 @@ re-alerts every tick until the real identifier field is confirmed.
 - `src/draft.js` — waiver/free-agency/trade parsing, pure. Only the confirmed
   transaction shape is formatted; anything else is bucketed for a one-off
   alert — see above.
-- `src/message.js` — message formatting
+- `src/message.js` — weekly message formatting, plus the shared
+  `managerName`/`managerInitials` identifier helpers
 - `src/ledger.js` — CSV formatting for `ledger.csv`, pure, no I/O
 - `config.json` — league ID, endpoints, pickle history, display names, MOTM
   month ranges
@@ -384,13 +392,53 @@ Uses WhatsApp markup (`*bold*`). The Telegram send deliberately sets **no**
 `parse_mode`, so asterisks arrive literally and render as bold when pasted into
 WhatsApp. Don't "fix" this by adding Markdown parse mode.
 
-Aligned tables (the season table, and the waiver message's two) go through
-`monospaceTable` in `src/table.js` — one padding/width implementation, wrapped
-in a ``` block so both clients use a fixed-width font. Widths always come from
-the rows handed in, never hardcoded. Inside a table a manager is
-`"Team Name (XX)"` (`managerShortLabel`), not the wider `"*Team*, Manager"`
-(`managerDisplay`) used in prose lines — a table has one row per item rather
-than one per manager, so the full name blows the width out.
+**No message uses a monospace block any more, and none should.** See below.
+
+### Why nothing is a table
+
+The Telegram send sets **no `parse_mode`** (see above), so a ``` block arrives
+in Telegram as three literal backticks and the text renders in Telegram's
+proportional font. Column padding therefore does nothing there — it only takes
+effect once the message is pasted into WhatsApp. Aligned tables were tried in
+both messages and repeatedly came apart on a phone for exactly this reason;
+widening or narrowing the columns could never have fixed it.
+
+Two habits replace them, and both hold their shape unaided:
+
+- **Uniform-width identifiers.** Every manager's initials are exactly two
+  characters, so the waiver line `II | Out → In` lines up in either client
+  with no padding. A literal pipe rather than a tab, because a tab's rendered
+  width is up to the client.
+- **Numbers first.** Every ranked line in the weekly message is
+  `N. points - manager`. Points are far more often the same width as each
+  other than names are, so the ranking reads straight down without padding.
+
+If a table is ever genuinely needed, note the trap that bit us: `.length`
+counts UTF-16 code units, so a decomposed name like "Horníček" measures 10
+while it displays as 8 — pad on that and every other row in the column goes
+out of line. Normalise to NFC before measuring.
+
+### Why the waiver message is plain lines, not a table
+
+The Telegram send sets **no `parse_mode`** (see above), so a ``` block arrives
+in Telegram as three literal backticks and the text renders in Telegram's
+proportional font. Column padding therefore does nothing there — it only takes
+effect once the message is pasted into WhatsApp. An aligned waiver table was
+tried and repeatedly came apart on a phone for exactly this reason; widening
+or narrowing the columns could never have fixed it.
+
+The `II | Out → In` line needs no padding at all: every manager's initials are
+exactly two characters, so the lines hold their shape in either client. A
+literal pipe rather than a tab, because a tab's rendered width is up to the
+client.
+
+Club codes were tried too — `Hall (NEW) → Konsa (AVL)` — and removed. They
+read well in Telegram but pushed the longest line from 25 to 39 characters,
+which wraps in WhatsApp, and WhatsApp is where the group actually reads it.
+bootstrap-static carries them if that tradeoff is ever worth revisiting:
+`teams[]` is a bare array of 20, each `{ code, id, name, pulse_id,
+short_name }`, joined via `elements[].team`; every `short_name` is three
+letters.
 
 Times shown to the group are UK local via `formatUkDeadline`
 (`Intl` + `Europe/London`), so they track BST/GMT rather than reading an hour

@@ -115,7 +115,20 @@ export function classifyTransactions(payload, gw) {
     else unrecognized.push(t);
   }
 
-  return { claims, denied, unrecognized };
+  // CONFIRMED against the real GW1 batch: `index` is the order the waivers
+  // were actually processed in, and sorting by it reproduces the league's own
+  // results table exactly (12/12 rows). The payload itself arrives grouped by
+  // manager instead, so without this the message lists claims in an order
+  // that means nothing. `priority` is the round — everyone's first claim,
+  // then their second, and so on — which is why an index-ordered list shows a
+  // manager's later claim failing on a player their own earlier claim took.
+  const byIndex = (a, b) => a.index - b.index;
+
+  return {
+    claims: claims.sort(byIndex),
+    denied: denied.sort(byIndex),
+    unrecognized
+  };
 }
 
 /**
@@ -143,6 +156,12 @@ export function waiverReport(
    * Shape is "II | Out → In": initials, a pipe, then the player leaving, an
    * arrow, and the player arriving. Reads in the direction the move actually
    * happened.
+   *
+   * Club codes were tried here and removed: "Hall (NEW) → Konsa (AVL)" read
+   * well in Telegram but pushed the longest line to 39 characters, which
+   * wraps in WhatsApp — and WhatsApp is where the group actually reads it.
+   * bootstrap-static's teams[] carries them ({ id, short_name }, joined via
+   * elements[].team) if that tradeoff is ever worth revisiting.
    *
    * The separator is a literal pipe rather than a tab because a tab's width
    * is up to the client, and inconsistent width is exactly what broke every

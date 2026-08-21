@@ -41,7 +41,7 @@ const REAL_CLAIM = {
   entry: 190207, // Nat Shaughnessy — "Eze Platter" in the real config.json
   event: 4,
   id: 77,
-  index: 0,
+  index: 1,
   kind: 'w',
   priority: 1,
   result: 'a'
@@ -95,38 +95,45 @@ const NO_TRADES = { trades: [] };
  */
 const GW1_DEADLINE = '2026-08-21T17:30:00Z';
 
+// team ids for 316/138/211/54/69/371 are REAL (from the live diagnostic);
+// the rest are stand-ins, since only the denied records were shown raw.
 const GW1_ELEMENTS = [
-  { id: 316, web_name: 'Emersonn' }, { id: 138, web_name: 'Kostoulas' },
-  { id: 211, web_name: 'Yeremy' }, { id: 54, web_name: 'Gomes' },
-  { id: 69, web_name: 'Scott' }, { id: 371, web_name: 'Gravenberch' },
-  { id: 900, web_name: 'David' }, { id: 901, web_name: 'Welbeck' },
-  { id: 902, web_name: 'Wood' }, { id: 903, web_name: 'Wright' },
-  { id: 904, web_name: 'Kluivert' }, { id: 905, web_name: 'Ngumoha' },
-  { id: 906, web_name: 'Madjo' }, { id: 907, web_name: 'Amad' },
-  { id: 908, web_name: 'Neto' }, { id: 909, web_name: 'White' },
-  { id: 910, web_name: 'Bijol' }, { id: 911, web_name: 'Konsa' },
-  { id: 912, web_name: 'Hall' }, { id: 913, web_name: 'Horníček' },
-  { id: 914, web_name: 'Martinez' }
+  { id: 316, web_name: 'Emersonn', team: 12 }, { id: 138, web_name: 'Kostoulas', team: 5 },
+  { id: 211, web_name: 'Yeremy', team: 8 }, { id: 54, web_name: 'Gomes', team: 2 },
+  { id: 69, web_name: 'Scott', team: 3 }, { id: 371, web_name: 'Gravenberch', team: 14 },
+  { id: 900, web_name: 'David', team: 1 }, { id: 901, web_name: 'Welbeck', team: 5 },
+  { id: 902, web_name: 'Wood', team: 17 }, { id: 903, web_name: 'Wright', team: 3 },
+  { id: 904, web_name: 'Kluivert', team: 3 }, { id: 905, web_name: 'Ngumoha', team: 14 },
+  { id: 906, web_name: 'Madjo', team: 8 }, { id: 907, web_name: 'Amad', team: 1 },
+  { id: 908, web_name: 'Neto', team: 2 }, { id: 909, web_name: 'White', team: 1 },
+  { id: 910, web_name: 'Bijol', team: 17 }, { id: 911, web_name: 'Konsa', team: 2 },
+  { id: 912, web_name: 'Hall', team: 17 }, { id: 913, web_name: 'Horníček', team: 5 },
+  { id: 914, web_name: 'Martinez', team: 2 }
 ];
 
-const gw1 = (entry, element_in, element_out, result, id) => ({
+const gw1 = (entry, element_in, element_out, result, id, index) => ({
   added: '2026-08-20T17:29:59.122187Z',
-  element_in, element_out, entry, event: 1, id, index: id, kind: 'w', priority: 1, result
+  element_in, element_out, entry, event: 1, id, index, kind: 'w', priority: 1, result
 });
 
+/**
+ * Listed in the order the LIVE PAYLOAD returns them — grouped by manager,
+ * NOT by processing order — so the index sort has real work to do. The
+ * `index` values are the real ones from the live diagnostic run.
+ */
 const GW1_TRANSACTIONS = [
-  gw1(197504, 900, 901, 'a', 1), // Rob Wiseman   — David for Welbeck
-  gw1(190207, 902, 903, 'a', 2), // Nat           — Wood for Wright
-  gw1(1931, 904, 371, 'a', 3), // Harry         — Kluivert for Gravenberch
-  gw1(207187, 905, 54, 'a', 4), // Fergus        — Ngumoha for Gomes
-  gw1(201762, 906, 138, 'a', 5), // Theo          — Madjo for Kostoulas
-  gw1(207411, 907, 908, 'a', 6), // David Cole    — Amad for Neto
-  gw1(197504, 909, 910, 'a', 7), // Rob Wiseman   — White for Bijol
-  gw1(1931, 911, 912, 'a', 8), // Harry         — Konsa for Hall
-  gw1(201762, 913, 914, 'a', 9), // Theo          — Horníček for Martinez
-  gw1(201762, 316, 138, 'do', 283995), // Theo   — Emersonn for Kostoulas
-  gw1(207187, 211, 54, 'do', 415815), // Fergus — Yeremy for Gomes
-  gw1(1931, 69, 371, 'do', 778485) // Harry  — Scott for Gravenberch
+  gw1(190207, 902, 903, 'a', 2, 2),
+  gw1(201762, 906, 138, 'a', 5, 5),
+  gw1(201762, 913, 914, 'a', 9, 11),
+  gw1(201762, 316, 138, 'do', 283995, 10),
+  gw1(207187, 905, 54, 'a', 4, 4),
+  gw1(207187, 211, 54, 'do', 415815, 9),
+  gw1(207411, 907, 908, 'a', 6, 6),
+  gw1(197504, 900, 901, 'a', 1, 1),
+  gw1(197504, 909, 910, 'a', 7, 7),
+  gw1(1931, 904, 371, 'a', 3, 3),
+  gw1(1931, 911, 912, 'a', 8, 8),
+  gw1(1931, 69, 371, 'do', 778485, 12)
 ];
 
 describe('endpoint config', () => {
@@ -323,39 +330,63 @@ describe('waiver results message', () => {
 describe('waiver lines — the real GW1 2026/27 batch', () => {
   const opts = () => ({ elements: GW1_ELEMENTS, label, deadline: new Date(GW1_DEADLINE) });
 
-  test('renders every one of the 9 accepted and 3 denied claims', () => {
-    const { message, unrecognized } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    const claimLines = message.split('\n').filter((l) => l.includes(' | '));
-    assert.equal(claimLines.length, 12);
-    assert.deepEqual(unrecognized, [], 'both results are confirmed — nothing bucketed');
-  });
-
-  test('one line per claim: a manager who claimed twice gets two lines', () => {
+  test("processing order matches the league's own results table", () => {
+    // Order is the API's `index`, cross-checked 12/12 against the league
+    // table. The fixture is in payload order (grouped by manager), so this
+    // only passes if the sort actually ran.
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    const hj = message.split('\n').filter((l) => l.startsWith('HJ |'));
-    assert.deepEqual(hj, [
+    const claimed = message.split('\n').filter((l) => l.includes(' | '));
+
+    assert.deepEqual(claimed, [
+      // accepted, index 1-8 then 11
+      'RW | Welbeck → David',
+      'NS | Wright → Wood',
       'HJ | Gravenberch → Kluivert',
+      'FM | Gomes → Ngumoha',
+      'TP | Kostoulas → Madjo',
+      'DC | Neto → Amad',
+      'RW | Bijol → White',
       'HJ | Hall → Konsa',
+      'TP | Martinez → Horníček',
+      // denied, index 9, 10, 12
+      'FM | Gomes → Yeremy',
+      'TP | Kostoulas → Emersonn',
       'HJ | Gravenberch → Scott'
     ]);
   });
 
-  test('every line is initials, one pipe separator, then exactly one arrow', () => {
+  test("a failed claim always follows the claim that took the player", () => {
+    // Why order matters: FM took Gomes at index 4, so his index-9 claim for
+    // the same out-player could not succeed. Reading in order shows that.
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    for (const line of message.split('\n').filter((l) => l.includes(' | '))) {
-      assert.match(line, /^[A-Z]{2} \| [^|]+ → [^|]+$/, line);
-      assert.equal(line.split(' | ').length, 2, 'exactly one separator');
-      assert.equal(line.split(' → ').length, 2, 'exactly one arrow');
-      assert.doesNotMatch(line, /\t/, 'no tabs — the pipe replaced it');
+    const all = message.split('\n').filter((l) => l.includes(' | '));
+    for (const [ok, failed] of [
+      ['FM | Gomes → Ngumoha', 'FM | Gomes → Yeremy'],
+      ['TP | Kostoulas → Madjo', 'TP | Kostoulas → Emersonn'],
+      ['HJ | Gravenberch → Kluivert', 'HJ | Gravenberch → Scott']
+    ]) {
+      assert.ok(all.indexOf(ok) < all.indexOf(failed), `${ok} must precede ${failed}`);
     }
   });
 
-  test('needs no padding: the identifier is two chars on every single line', () => {
+  test('renders every one of the 9 accepted and 3 denied claims', () => {
+    const { message, unrecognized } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
+    assert.equal(message.split('\n').filter((l) => l.includes(' | ')).length, 12);
+    assert.deepEqual(unrecognized, []);
+  });
+
+  test('one line per claim: a manager who claimed twice gets two lines', () => {
     const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
-    const widths = new Set(
-      message.split('\n').filter((l) => l.includes(' | ')).map((l) => l.split(' | ')[0].length)
-    );
-    assert.deepEqual([...widths], [2], 'uniform width is what makes this hold shape');
+    assert.equal(message.split('\n').filter((l) => l.startsWith('HJ |')).length, 3);
+  });
+
+  test('every line is initials, one pipe, then exactly one arrow', () => {
+    const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
+    for (const line of message.split('\n').filter((l) => l.includes(' | '))) {
+      assert.match(line, /^[A-Z]{2} \| [^|]+ → [^|]+$/, line);
+      assert.doesNotMatch(line, /\t/, 'no tabs — the pipe replaced it');
+      assert.doesNotMatch(line, /\([A-Z]{3}\)/, 'club codes removed — too wide for WhatsApp');
+    }
   });
 
   test('lines stay short enough not to wrap on a phone', () => {
@@ -364,6 +395,14 @@ describe('waiver lines — the real GW1 2026/27 batch', () => {
       ...message.split('\n').filter((l) => l.includes(' | ')).map((l) => l.length)
     );
     assert.ok(longest <= 32, `longest claim line is ${longest} chars`);
+  });
+
+  test('needs no padding: the identifier is two chars on every line', () => {
+    const { message } = waiverReport({ transactions: GW1_TRANSACTIONS }, 1, opts());
+    const widths = new Set(
+      message.split('\n').filter((l) => l.includes(' | ')).map((l) => l.split(' | ')[0].length)
+    );
+    assert.deepEqual([...widths], [2]);
   });
 
   test('the free-agency line carries the real deadline in UK local time', () => {
