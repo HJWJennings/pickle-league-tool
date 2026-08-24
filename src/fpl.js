@@ -14,9 +14,18 @@ async function get(path) {
 
 /**
  * Which gameweek are we in, and are its scores settled?
- * VERIFY: field names on /game. `current_event` is reliable;
- * `current_event_finished` may be named differently — hit the endpoint in a
- * browser once and adjust. The `?? null` keeps this from crashing either way.
+ *
+ * CONFIRMED (2026-08-24, live): /game returns exactly six fields —
+ * `current_event`, `current_event_finished`, `next_event`,
+ * `processing_status`, `trades_time_for_approval`, `waivers_processed`.
+ * Both names below are real; the `?? null` is now belt-and-braces.
+ *
+ * ⚠️ `current_event_finished` flips only once bonus points are CONFIRMED, not
+ * when the last whistle blows. GW1 2026/27 sat at `false` for hours after all
+ * ten fixtures had ended, while every fixture read
+ * `finished: false, finished_provisional: true`. That lag is normal and is
+ * what index.js's `finished === false` guard deliberately waits out — see the
+ * guard's comment in index.js.
  */
 export async function getGameState() {
   const game = await get('/game');
@@ -30,6 +39,11 @@ export async function getGameState() {
 /**
  * One request gives us the whole league: who's in it and what they scored
  * this gameweek.
+ *
+ * CONFIRMED (2026-08-24, live): `standings[].event_total` and `.total` are
+ * real and correct — checked against all nine managers' GW1 scores. Note
+ * `event_total` tracks the LIVE score, provisional bonus included, so it is
+ * populated well before `current_event_finished` flips.
  *
  * GOTCHA: there are two different IDs in this payload.
  *   league_entries[].id       -> the *league entry* id, used by standings[]
@@ -70,7 +84,8 @@ export async function getLeague(leagueId) {
 
 /**
  * Backfill path, only needed if a weekly run was missed.
- * VERIFY: the draft history endpoint. If /history 404s, fall back to
+ * VERIFY: the draft history endpoint — still unconfirmed, never yet called
+ * against the live API. If /history 404s, fall back to
  * /entry/{entryId}/event/{gw} and read entry_history.points instead.
  */
 export async function getEntryHistory(entryId) {
@@ -95,12 +110,22 @@ function unwrapList(value, name, keys) {
  * from one request — both live on bootstrap-static and both are needed on
  * the same tick.
  *
- * CONFIRMED: `events[].deadline_time` (GW1 = 2026-08-21T17:30:00Z) and
+ * CONFIRMED (2026-08-24, live): `events` and `elements` both arrive WRAPPED
+ * as `.data`, not as bare arrays — so the unwrap below is load-bearing, not
+ * defensive. Top-level keys are `elements, element_types, element_stats,
+ * events, fixtures, settings, teams`. Also confirmed:
+ * `events[].deadline_time` (GW1 = 2026-08-21T17:30:00Z) and
  * `elements[].web_name` (id 1 = "Raya").
- * VERIFY: the containers. Either list may come back bare or wrapped as
- * `.data`; both are unwrapped, and anything else throws rather than silently
- * yielding an empty list — an empty events list would leave every time-window
- * guard permanently closed and the new messages silently dead.
+ *
+ * A draft `events[]` entry is slim — `average_entry_score`, `deadline_time`,
+ * `id`, `name`, `finished`, `highest_scoring_entry`, `trades_time`,
+ * `waivers_time` — and notably has NO `finished_provisional` and no
+ * `data_checked`. Those live per-FIXTURE on /event/{gw}/fixtures instead
+ * (`/fixtures` on its own 404s). Don't reach for them here.
+ *
+ * The unwrap still throws on any third shape rather than silently yielding an
+ * empty list — an empty events list would leave every time-window guard
+ * permanently closed and the scheduled messages silently dead.
  */
 export async function getBootstrap() {
   const data = await get('/bootstrap-static');

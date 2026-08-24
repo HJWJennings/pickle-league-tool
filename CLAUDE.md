@@ -375,11 +375,48 @@ re-alerts every tick until the real identifier field is confirmed.
 undocumented API. If data looks wrong, check those first. When you confirm or
 correct one, update the comment.
 
-Confirmed so far: `events[].deadline_time` (GW1 = `2026-08-21T17:30:00Z`), and
-that the transactions/trades endpoints exist and return `{transactions: []}` /
-`{trades: []}`. Still unconfirmed: the shape of a *populated* transaction or
-trade record (hence the scaffolding above), and whether `bootstrap-static`
-wraps `events` as `events.data`.
+Confirmed so far:
+
+- `/game` returns exactly six fields: `current_event`,
+  `current_event_finished`, `next_event`, `processing_status`,
+  `trades_time_for_approval`, `waivers_processed`.
+- `standings[].event_total` and `.total` — checked against all nine managers'
+  real GW1 scores.
+- `bootstrap-static` wraps **both** `events` and `elements` as `.data`; they
+  are *never* bare arrays. `getBootstrap`'s unwrap is load-bearing, not
+  defensive.
+- `events[].deadline_time` (GW1 = `2026-08-21T17:30:00Z`) and
+  `elements[].web_name` (id 1 = "Raya").
+- The transactions/trades endpoints exist and return `{transactions: []}` /
+  `{trades: []}`.
+
+Still unconfirmed: the shape of a *populated* trade record (hence the
+scaffolding above), the remaining transaction kind/result values, and
+`/entry/{id}/history`, which has never been called against the live API.
+
+### `finished` lags the final whistle — by design, not a bug
+
+The weekly report's guard is `game.finished === false`, i.e. `/game`'s
+`current_event_finished`. That flips only once **bonus points are confirmed**,
+which is hours after the last fixture ends.
+
+CONFIRMED, GW1 2026/27: with all ten fixtures played out, every one of them
+read `finished: false, finished_provisional: true`, `current_event_finished`
+was still `false`, and `standings[].event_total` was *already* populated with
+live provisional-bonus scores. The bot correctly stayed silent through every
+hourly tick in between.
+
+Waiting is the right behaviour: sending on provisional scores would put a
+number in the group chat that bonus can still move, and `lastReportedGw` would
+then suppress the corrected version — a wrong-but-plausible message. `--force`
+is the deliberate override if it is ever genuinely stuck.
+
+**Don't reach for `finished_provisional` on the event object.** A draft
+`events[]` entry is slim — `average_entry_score`, `deadline_time`, `id`,
+`name`, `finished`, `highest_scoring_entry`, `trades_time`, `waivers_time` —
+with no `finished_provisional` and no `data_checked`. Those are per-*fixture*
+fields on `/event/{gw}/fixtures` (`/fixtures` alone 404s). The `fixtures` key
+on `bootstrap-static` is neither a bare array nor `.data` and is unused.
 
 Two different IDs exist in the league payload: `league_entries[].id`
 (used by `standings[]`) and `league_entries[].entry_id` (used by `/entry/`
