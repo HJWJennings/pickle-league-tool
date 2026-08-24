@@ -4,6 +4,11 @@ name: GW diagnostic (read-only)
 
 on:
   workflow_dispatch:
+  # Scoped to this branch only: workflow_dispatch needs the file on the
+  # default branch, and this diagnostic must not touch main.
+  push:
+    branches:
+      - claude/verify-fpl-api-live-fdlkul
 
 permissions:
   contents: read
