@@ -1,0 +1,17 @@
+# THROWAWAY diagnostic. Reads the live Draft API and prints. Sends nothing,
+# writes nothing, commits nothing. Delete once GW1's report has gone out.
+name: GW diagnostic (read-only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Dump /game and GW1's bootstrap-static event
+        run: node scratch/gw-diagnostic.mjs
