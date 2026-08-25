@@ -1,6 +1,6 @@
 {
   "season": "2026/27",
-  "lastReportedGw": null,
+  "lastReportedGw": 1,
   "lastWaiverGw": 1,
   "lastFreeAgencyGw": null,
   "announcedTradeIds": [],
@@ -10,6 +10,55 @@
     "778485",
     "808689"
   ],
-  "managers": {},
-  "gameweeks": {}
+  "managers": {
+    "1931": {
+      "teamName": "Mæts back on Semenyo",
+      "manager": "Harry Jennings"
+    },
+    "2105": {
+      "teamName": "Better Call Tzol",
+      "manager": "Cormac R"
+    },
+    "190207": {
+      "teamName": "Eze Platter",
+      "manager": "Nat Shaughnessy"
+    },
+    "197504": {
+      "teamName": "She’s an Eze Lover",
+      "manager": "Rob Wiseman"
+    },
+    "201762": {
+      "teamName": "Mr Brobbey",
+      "manager": "Theo Pennefather"
+    },
+    "205835": {
+      "teamName": "The Ollie Hot Wings",
+      "manager": "Jack Jennings"
+    },
+    "205885": {
+      "teamName": "Draft Idiot",
+      "manager": "Ralph Tamplin"
+    },
+    "207187": {
+      "teamName": "Fergie Time",
+      "manager": "Fergus Munro"
+    },
+    "207411": {
+      "teamName": "Pedro Porro for life",
+      "manager": "David Cole"
+    }
+  },
+  "gameweeks": {
+    "1": {
+      "1931": 48,
+      "2105": 62,
+      "190207": 51,
+      "197504": 57,
+      "201762": 30,
+      "205835": 36,
+      "205885": 40,
+      "207187": 31,
+      "207411": 27
+    }
+  }
 }
