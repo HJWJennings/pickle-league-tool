@@ -1,0 +1,24 @@
+# THROWAWAY diagnostic. Sends ONE clearly-labeled test message using the
+# real TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets and the exact same method
+# index.js uses (raw fetch, no parse_mode). Proves whether the send
+# mechanism itself still works, independent of the cron/scheduling issue.
+name: Telegram send diagnostic (one-off)
+
+on:
+  push:
+    branches:
+      - claude/verify-fpl-api-live-fdlkul
+
+permissions:
+  contents: read
+
+jobs:
+  telegram-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Send trivial test message via the real credentials
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node scratch/telegram-diagnostic.mjs
