@@ -193,19 +193,44 @@ results table (workflow run #5):
 
 | Field | Value | Meaning | Samples |
 |---|---|---|---|
-| `kind` | `"w"` | waiver claim | 12 |
-| `result` | `"a"` | accepted | 9 |
-| `result` | `"do"` | denied | 3 |
+| `kind` | `"w"` | waiver claim | 34 |
+| `result` | `"a"` | accepted | 17 |
+| `result` | `"do"` | denied — the player you tried to DROP was already gone | 9 |
+| `result` | `"di"` | denied — the player you tried to ADD was already gone | 8 |
 
 Player names come from bootstrap-static's `elements[]`, matched on `id`, shown
 via `web_name` (confirmed: id 1 = "Raya").
 
-In all three real `"do"` records the claim's `element_out` had already been
+In all nine real `"do"` records the claim's `element_out` had already been
 used as the `element_out` of an *earlier accepted claim by the same manager*
 — the player was no longer theirs to drop. That matches the league table's
-"player out not available". **The API carries no reason field**, so the
-message never states one; what the letters `"do"` abbreviate isn't documented
-anywhere either, and nothing in the code expands it.
+"player out not available".
+
+`"di"` is the mirror image, and was confirmed on the GW2 batch by the same
+kind of cross-check rather than by reading the letters. Two independent
+checks, both clean on all 8 records:
+
+1. **Uniqueness.** Five players were contested by 2–3 managers each. Every
+   contested player had *exactly one* accepted claim, and every other claim
+   for that player read `"di"`. A player can only join one squad, so those
+   cannot be acceptances.
+2. **Precedence.** Every `"di"` claim's `element_in` had already been won by
+   an accepted claim at a *lower* `index` — the confirmed processing order.
+   8/8, zero unexplained.
+
+The symmetry is itself corroboration: `"do"` is "what you tried to drop was
+already gone", `"di"` is "what you tried to add was already gone".
+
+**The API carries no reason field**, so the message never states one — both
+denial kinds render identically under "Missed out". What the letters
+abbreviate isn't documented anywhere, and nothing in the code expands them.
+
+⚠️ `"di"` sat in the unrecognized bucket for its first live gameweek, which
+silently kept **8 of GW2's 22 records** out of the group message — the
+accepted list was right, but "Missed out" showed 6 of 14. That is the bucket
+working as designed (alert rather than guess), and also the reminder that a
+non-empty bucket means the group is seeing an *incomplete* picture, not
+merely that Harry has an unread alert. Treat a bucket alert as time-sensitive.
 
 Still unseen: the presumed `"f"` kind for free agents, any other `result`
 value, and any populated trade record at all.
@@ -240,12 +265,12 @@ rendering with a hole in it.
 values.** When they're confirmed, add the real handling in `src/draft.js` and
 the bucket shrinks — that is exactly how `result: "do"` got implemented: the
 bucket alerted on three real records, they were cross-checked against the
-league's results table, and only then were they parsed. Do not instead invent
-field names to make the bucket empty.
+league's results table, and only then were they parsed — and again for `"di"`
+on the GW2 batch. Do not instead invent field names to make the bucket empty.
 
 | Message | Fires | Guard in `state.json` | Status |
 |---|---|---|---|
-| Waiver results | window opens ~1h after the waiver deadline, stays open 22h | `lastWaiverGw` | **kind `w`, results `a` and `do` parsed for real**; anything else alerts |
+| Waiver results | window opens ~1h after the waiver deadline, stays open 22h | `lastWaiverGw` | **kind `w`, results `a`, `do` and `di` parsed for real**; anything else alerts |
 | Free-agency results | window opens at the gameweek deadline, stays open 12h | `lastFreeAgencyGw` | no confirmed shape — empty case only, anything else alerts |
 | Trade detection | every hourly tick, no window | `announcedTradeIds` | no confirmed shape — silent when quiet, new trade alerts |
 
