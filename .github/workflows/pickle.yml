@@ -11,7 +11,20 @@ on:
     #     lastWaiverGw/lastFreeAgencyGw so one window sends once.
     #   - trade check: every tick, no window — trades complete at arbitrary
     #     times. Silent unless something new turns up.
-    - cron: '0 * * * *'
+    #
+    # Minute 23, NOT 0. GitHub runs everyone's on-the-hour crons at once and
+    # documents that `schedule` "can be delayed during periods of high load";
+    # an odd minute sits outside that stampede. CONFIRMED Aug 2026: on '0 * * *
+    # *' the gaps between runs stretched to 2h40m, 5h13m and finally 10h41m
+    # with no failure and no change here, and the GW2 waiver message was lost
+    # in one of those gaps.
+    #
+    # This only improves the odds — it is NOT the actual safety net. GitHub
+    # guarantees nothing about when (or whether) a scheduled run fires, so the
+    # real fix is that the reporting windows in src/deadlines.js are hours
+    # wide, and the state.json guards make a late send harmless. Do not narrow
+    # those windows on the assumption this cron is punctual.
+    - cron: '23 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:

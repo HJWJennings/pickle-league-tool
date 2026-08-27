@@ -1,8 +1,9 @@
 # Pickle League — project context
 
 Weekly stats and fine bookkeeping for a private FPL Draft league of 9
-friends. Runs hourly on a GitHub Actions cron — guards in `index.js`, not the
-schedule, decide when anything actually sends — and messages Harry on
+friends. Runs hourly-ish on a GitHub Actions cron (minute 23; GitHub delays
+scheduled runs unpredictably, so treat the interval as a hint, not a promise)
+— guards in `index.js`, not the schedule, decide when anything actually sends — and messages Harry on
 Telegram, who forwards it to the league's WhatsApp group.
 
 This is a hobby project. Optimise for "still works in April with zero
@@ -244,8 +245,8 @@ field names to make the bucket empty.
 
 | Message | Fires | Guard in `state.json` | Status |
 |---|---|---|---|
-| Waiver results | ~1h after the waiver deadline | `lastWaiverGw` | **kind `w`, results `a` and `do` parsed for real**; anything else alerts |
-| Free-agency results | at the gameweek deadline | `lastFreeAgencyGw` | no confirmed shape — empty case only, anything else alerts |
+| Waiver results | window opens ~1h after the waiver deadline, stays open 22h | `lastWaiverGw` | **kind `w`, results `a` and `do` parsed for real**; anything else alerts |
+| Free-agency results | window opens at the gameweek deadline, stays open 12h | `lastFreeAgencyGw` | no confirmed shape — empty case only, anything else alerts |
 | Trade detection | every hourly tick, no window | `announcedTradeIds` | no confirmed shape — silent when quiet, new trade alerts |
 
 ### Alert once, don't throw hourly
@@ -317,6 +318,35 @@ rather than trusting `current_event`, whose meaning between gameweeks is
 ambiguous (it can still point at the just-finished week) — picking the wrong
 one would tag a message with the wrong gameweek number. Deadlines aren't
 ambiguous.
+
+#### The windows are hours wide on purpose — never narrow them
+
+The waiver window is `[waiverDeadline + 1h, +23h)` and the free-agency window
+is `[deadline, +12h)` (`WAIVER_WINDOW_HOURS` / `FREE_AGENCY_WINDOW_HOURS`).
+Both were 2h until GW2 2026/27, when the GW2 waiver message was **silently
+lost**: GitHub's scheduler drifted until consecutive runs were 2h40m, then
+5h13m, then **10h41m** apart — no failure, no error, nothing changed in this
+repo — and the 2h window fell entirely inside a gap.
+
+**The cron interval is not a guarantee.** GitHub documents that `schedule`
+"can be delayed during periods of high load", and gives no upper bound. The
+workflow now fires at minute 23 rather than 0 to sit outside the on-the-hour
+stampede, but that only improves the odds; the width of these windows is the
+actual safety net.
+
+Widening is free, and that is a property of the design rather than luck: the
+windows only answer "is it roughly time yet", while `lastWaiverGw` /
+`lastFreeAgencyGw` answer "have we already sent". So a wider window can only
+ever turn a *missed* message into a *late* one — never into a duplicate. A
+late waiver message is still true (it reports waivers that have processed and
+points at a deadline that hasn't passed); a missing one is a hole nobody
+notices until the group asks.
+
+The waiver window deliberately closes 1h *before* the gameweek deadline so it
+can never overlap the free-agency window that opens at it. Tests assert both
+that the two never claim the same moment, and that a run every 11h still lands
+in each window whatever the phase — that second pair fails if either width is
+put back to 2h.
 
 ⚠️ Only the `deadline_time` *field* is confirmed. Whether `bootstrap-static`
 returns `events` as a bare array or wrapped as `events.data` is not, so
