@@ -1,0 +1,20 @@
+# THROWAWAY diagnostic. Read-only: fetches the transactions payload and
+# tests whether result "di" is consistent with a DENIAL. Sends nothing,
+# writes nothing, commits nothing.
+name: di-result diagnostic (read-only)
+
+on:
+  push:
+    branches:
+      - claude/verify-fpl-api-live-fdlkul
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Cross-check result "di" against accepted claims
+        run: node scratch/di-diagnostic.mjs
