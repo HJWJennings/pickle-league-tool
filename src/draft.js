@@ -29,21 +29,41 @@ const b = (s) => `*${s}*`;
 const i = (s) => `_${s}_`;
 
 /**
- * Confirmed transaction values, all against real GW1 2026/27 data:
+ * Confirmed transaction values, against real GW1 and GW2 2026/27 data:
  *   kind 'w'    — a waiver claim
- *   result 'a'  — accepted (9 real records, cross-checked against the
- *                 league's own results table)
- *   result 'do' — denied (3 real records, same cross-check). In all three,
- *                 the claim's element_out had already been used as the
+ *   result 'a'  — accepted (9 real GW1 records + 8 GW2, cross-checked
+ *                 against the league's own results table)
+ *   result 'do' — denied, OUT-side. In all 3 GW1 and all 6 GW2 records, the
+ *                 claim's element_out had already been used as the
  *                 element_out of an EARLIER accepted claim by the same
  *                 manager, so the player was no longer theirs to drop.
+ *   result 'di' — denied, IN-side. In all 8 GW2 records, the claim's
+ *                 element_in had already been taken as the element_in of an
+ *                 EARLIER accepted claim (by anyone), so the player was no
+ *                 longer available to claim. 8/8, zero unexplained.
  *
- * What the letters "do" abbreviate is not documented anywhere; only the
- * meaning is confirmed, so nothing here expands it.
+ * 'di' was confirmed the same way 'do' was — by cross-check, not by reading
+ * the letters. Two independent checks on the GW2 batch:
+ *   1. Uniqueness. Five players were contested by 2-3 managers each. Every
+ *      contested player had EXACTLY ONE accepted claim, and every other
+ *      claim for that player read 'di'. Since a player can only join one
+ *      squad, those cannot be acceptances.
+ *   2. Precedence. Every 'di' claim's element_in was already won by an
+ *      accepted claim at a LOWER `index` — the confirmed processing order.
+ *
+ * The pair is symmetric and that symmetry is itself corroboration: 'do' is
+ * "the player you tried to drop was already gone", 'di' is "the player you
+ * tried to add was already gone". What the letters abbreviate is still not
+ * documented anywhere, so nothing here expands them — and the message never
+ * states a reason for a denial, because the API carries no reason field.
  */
 const KIND_WAIVER = 'w';
 const RESULT_ACCEPTED = 'a';
-const RESULT_DENIED = 'do';
+const RESULT_DENIED_OUT = 'do';
+const RESULT_DENIED_IN = 'di';
+
+/** Every confirmed denial result. Both render identically — see above. */
+const DENIED_RESULTS = new Set([RESULT_DENIED_OUT, RESULT_DENIED_IN]);
 
 /**
  * config.endpoints holds the two URLs verbatim as confirmed against the live
@@ -111,7 +131,7 @@ export function classifyTransactions(payload, gw) {
       t.element_out != null;
 
     if (describable && t.result === RESULT_ACCEPTED) claims.push(t);
-    else if (describable && t.result === RESULT_DENIED) denied.push(t);
+    else if (describable && DENIED_RESULTS.has(t.result)) denied.push(t);
     else unrecognized.push(t);
   }
 

@@ -79,6 +79,26 @@ const REAL_DENIED = {
   result: 'do'
 };
 
+/**
+ * CONFIRMED fixture: a real IN-side denied claim, verbatim from the GW2
+ * 2026/27 live payload. Entry 205835 is Jack Jennings; he wanted M.Sangaré
+ * (element 556), but David Cole's claim for the same player was accepted at
+ * index 1, three places earlier in the processing order — so by the time
+ * this claim ran the player was already gone.
+ */
+const REAL_DENIED_IN = {
+  added: '2026-08-22T11:56:04.761065Z',
+  element_in: 556,
+  element_out: 14,
+  entry: 205835,
+  event: 2,
+  id: 893994,
+  index: 4,
+  kind: 'w',
+  priority: 1,
+  result: 'di'
+};
+
 const NO_TRANSACTIONS = { transactions: [] };
 const NO_TRADES = { trades: [] };
 
@@ -203,6 +223,42 @@ describe('transaction classification', () => {
     assert.equal(claims.length, 0);
     assert.deepEqual(denied, [REAL_DENIED]);
     assert.equal(unrecognized.length, 0);
+  });
+
+  test('CONFIRMED result "di" is a denied claim, not unrecognized', () => {
+    const { claims, denied, unrecognized } = classifyTransactions(
+      { transactions: [REAL_DENIED_IN] },
+      2
+    );
+    assert.equal(claims.length, 0);
+    assert.deepEqual(denied, [REAL_DENIED_IN]);
+    assert.equal(
+      unrecognized.length,
+      0,
+      '"di" used to fall in the unrecognized bucket, which silently dropped ' +
+        '8 of GW2\'s 22 records from the group message'
+    );
+  });
+
+  test('"do" and "di" land in the same denied list — both are just denials', () => {
+    const { denied } = classifyTransactions(
+      { transactions: [{ ...REAL_DENIED, event: 2 }, REAL_DENIED_IN] },
+      2
+    );
+    assert.equal(denied.length, 2);
+    // Sorted by processing index, same as every other list.
+    assert.deepEqual(denied.map((d) => d.index), [4, 12]);
+  });
+
+  test('an unconfirmed result is still unrecognized — the bucket still works', () => {
+    const invented = { ...REAL_DENIED_IN, id: 999, result: 'zz' };
+    const { claims, denied, unrecognized } = classifyTransactions(
+      { transactions: [invented] },
+      2
+    );
+    assert.equal(claims.length, 0);
+    assert.equal(denied.length, 0);
+    assert.deepEqual(unrecognized, [invented]);
   });
 
   test('accepted and denied are separated within one gameweek batch', () => {

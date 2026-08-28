@@ -125,6 +125,23 @@ async function main() {
  * just returns instead of ending the process, so the draft tasks can follow.
  */
 async function runGameweekReport(config, state, game, gw) {
+  /**
+   * `game.finished` is /game's `current_event_finished`, which flips only
+   * once bonus points are CONFIRMED — not when the last fixture ends.
+   * CONFIRMED lag, GW1 2026/27: all ten fixtures read
+   * `finished: false, finished_provisional: true` for hours after full time,
+   * while `current_event_finished` stayed false and `standings[].event_total`
+   * was already populated with live (provisional-bonus) scores.
+   *
+   * Waiting that out is the point. Sending on provisional scores would put a
+   * number in the group chat that bonus can still move, and lastReportedGw
+   * would then suppress the corrected version — a wrong-but-plausible message,
+   * which is exactly what this project refuses to produce. If it's ever
+   * genuinely stuck, --force is the deliberate override.
+   *
+   * Note the draft `events[]` entry has no `finished_provisional` field at
+   * all; that lives per-fixture on /event/{gw}/fixtures. See src/fpl.js.
+   */
   if (game.finished === false && !FORCE) {
     console.log('Gameweek not settled yet — bailing. Re-run later or pass --force.');
     return;

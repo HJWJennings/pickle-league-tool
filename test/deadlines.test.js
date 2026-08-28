@@ -98,30 +98,66 @@ describe('time windows', () => {
 
 describe('which gameweek is in window right now', () => {
   test('waiver window opens ~1h after the waiver deadline and names that gameweek', () => {
-    // GW1 waivers process at 2026-08-20T17:30Z; window is 18:30 - 20:30.
+    // GW1 waivers process at 2026-08-20T17:30Z; the window runs 18:30 that
+    // day until 16:30 the next — an hour before GW1's 17:30 deadline.
     assert.equal(gameweekInWaiverWindow(EVENTS, new Date('2026-08-20T18:30:00Z')), 1);
-    assert.equal(gameweekInWaiverWindow(EVENTS, new Date('2026-08-20T20:29:59Z')), 1);
+    assert.equal(gameweekInWaiverWindow(EVENTS, new Date('2026-08-21T16:29:59Z')), 1);
   });
 
   test('waiver window is closed at the waiver deadline itself and after it lapses', () => {
     assert.equal(gameweekInWaiverWindow(EVENTS, new Date(GW1_WAIVER)), null);
-    assert.equal(gameweekInWaiverWindow(EVENTS, new Date('2026-08-20T20:30:00Z')), null);
+    assert.equal(gameweekInWaiverWindow(EVENTS, new Date('2026-08-21T16:30:00Z')), null);
   });
 
-  test('hourly ticks land in the waiver window exactly twice', () => {
-    // The cron fires on the hour; the window must catch at least one tick.
-    const hits = [];
-    for (let h = 0; h < 48; h++) {
-      const now = new Date(Date.parse('2026-08-20T00:00:00Z') + h * 60 * 60 * 1000);
-      if (gameweekInWaiverWindow(EVENTS, now) === 1) hits.push(now.toISOString());
-    }
-    assert.deepEqual(hits, ['2026-08-20T19:00:00.000Z', '2026-08-20T20:00:00.000Z']);
+  test('the waiver window closes before the free-agency window opens', () => {
+    // The two must never both claim the same moment. GW1's waiver window
+    // ends at 16:30; its free-agency window opens at the 17:30 deadline.
+    const gap = new Date('2026-08-21T17:00:00Z');
+    assert.equal(gameweekInWaiverWindow(EVENTS, gap), null);
+    assert.equal(gameweekInDeadlineWindow(EVENTS, gap), null);
   });
 
   test('deadline window names the gameweek whose deadline just passed', () => {
     assert.equal(gameweekInDeadlineWindow(EVENTS, new Date(GW1_DEADLINE)), 1);
-    assert.equal(gameweekInDeadlineWindow(EVENTS, new Date('2026-08-21T19:29:59Z')), 1);
-    assert.equal(gameweekInDeadlineWindow(EVENTS, new Date('2026-08-21T19:30:00Z')), null);
+    assert.equal(gameweekInDeadlineWindow(EVENTS, new Date('2026-08-22T05:29:59Z')), 1);
+    assert.equal(gameweekInDeadlineWindow(EVENTS, new Date('2026-08-22T05:30:00Z')), null);
+  });
+
+  /**
+   * The regression that actually bit us. GitHub's scheduler drifted until
+   * consecutive runs were 10h41m apart and the 2h waiver window fell entirely
+   * into a gap, so GW2's message was never sent. These assert the windows are
+   * wide enough that a run landing ANYWHERE in such a gap still catches them.
+   */
+  test('a 10h gap between runs still lands in the waiver window', () => {
+    // Worst observed real gap, walked across the whole GW2 waiver period.
+    const GAP_H = 11; // one hour worse than the worst gap actually seen
+    for (let offset = 0; offset < GAP_H; offset++) {
+      const hits = [];
+      for (let h = offset; h < 48; h += GAP_H) {
+        const now = new Date(Date.parse('2026-08-27T00:00:00Z') + h * 60 * 60 * 1000);
+        if (gameweekInWaiverWindow(EVENTS, now) === 2) hits.push(now.toISOString());
+      }
+      assert.ok(
+        hits.length > 0,
+        `a run every ${GAP_H}h starting at +${offset}h missed GW2's waiver window entirely`
+      );
+    }
+  });
+
+  test('a 10h gap between runs still lands in the free-agency window', () => {
+    const GAP_H = 11;
+    for (let offset = 0; offset < GAP_H; offset++) {
+      const hits = [];
+      for (let h = offset; h < 48; h += GAP_H) {
+        const now = new Date(Date.parse('2026-08-28T00:00:00Z') + h * 60 * 60 * 1000);
+        if (gameweekInDeadlineWindow(EVENTS, now) === 2) hits.push(now.toISOString());
+      }
+      assert.ok(
+        hits.length > 0,
+        `a run every ${GAP_H}h starting at +${offset}h missed GW2's free-agency window`
+      );
+    }
   });
 
   test('picks GW2, not GW1, inside GW2 windows', () => {

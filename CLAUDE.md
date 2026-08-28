@@ -1,8 +1,9 @@
 # Pickle League — project context
 
 Weekly stats and fine bookkeeping for a private FPL Draft league of 9
-friends. Runs hourly on a GitHub Actions cron — guards in `index.js`, not the
-schedule, decide when anything actually sends — and messages Harry on
+friends. Runs hourly-ish on a GitHub Actions cron (minute 23; GitHub delays
+scheduled runs unpredictably, so treat the interval as a hint, not a promise)
+— guards in `index.js`, not the schedule, decide when anything actually sends — and messages Harry on
 Telegram, who forwards it to the league's WhatsApp group.
 
 This is a hobby project. Optimise for "still works in April with zero
@@ -192,19 +193,44 @@ results table (workflow run #5):
 
 | Field | Value | Meaning | Samples |
 |---|---|---|---|
-| `kind` | `"w"` | waiver claim | 12 |
-| `result` | `"a"` | accepted | 9 |
-| `result` | `"do"` | denied | 3 |
+| `kind` | `"w"` | waiver claim | 34 |
+| `result` | `"a"` | accepted | 17 |
+| `result` | `"do"` | denied — the player you tried to DROP was already gone | 9 |
+| `result` | `"di"` | denied — the player you tried to ADD was already gone | 8 |
 
 Player names come from bootstrap-static's `elements[]`, matched on `id`, shown
 via `web_name` (confirmed: id 1 = "Raya").
 
-In all three real `"do"` records the claim's `element_out` had already been
+In all nine real `"do"` records the claim's `element_out` had already been
 used as the `element_out` of an *earlier accepted claim by the same manager*
 — the player was no longer theirs to drop. That matches the league table's
-"player out not available". **The API carries no reason field**, so the
-message never states one; what the letters `"do"` abbreviate isn't documented
-anywhere either, and nothing in the code expands it.
+"player out not available".
+
+`"di"` is the mirror image, and was confirmed on the GW2 batch by the same
+kind of cross-check rather than by reading the letters. Two independent
+checks, both clean on all 8 records:
+
+1. **Uniqueness.** Five players were contested by 2–3 managers each. Every
+   contested player had *exactly one* accepted claim, and every other claim
+   for that player read `"di"`. A player can only join one squad, so those
+   cannot be acceptances.
+2. **Precedence.** Every `"di"` claim's `element_in` had already been won by
+   an accepted claim at a *lower* `index` — the confirmed processing order.
+   8/8, zero unexplained.
+
+The symmetry is itself corroboration: `"do"` is "what you tried to drop was
+already gone", `"di"` is "what you tried to add was already gone".
+
+**The API carries no reason field**, so the message never states one — both
+denial kinds render identically under "Missed out". What the letters
+abbreviate isn't documented anywhere, and nothing in the code expands them.
+
+⚠️ `"di"` sat in the unrecognized bucket for its first live gameweek, which
+silently kept **8 of GW2's 22 records** out of the group message — the
+accepted list was right, but "Missed out" showed 6 of 14. That is the bucket
+working as designed (alert rather than guess), and also the reminder that a
+non-empty bucket means the group is seeing an *incomplete* picture, not
+merely that Harry has an unread alert. Treat a bucket alert as time-sensitive.
 
 Still unseen: the presumed `"f"` kind for free agents, any other `result`
 value, and any populated trade record at all.
@@ -239,13 +265,13 @@ rendering with a hole in it.
 values.** When they're confirmed, add the real handling in `src/draft.js` and
 the bucket shrinks — that is exactly how `result: "do"` got implemented: the
 bucket alerted on three real records, they were cross-checked against the
-league's results table, and only then were they parsed. Do not instead invent
-field names to make the bucket empty.
+league's results table, and only then were they parsed — and again for `"di"`
+on the GW2 batch. Do not instead invent field names to make the bucket empty.
 
 | Message | Fires | Guard in `state.json` | Status |
 |---|---|---|---|
-| Waiver results | ~1h after the waiver deadline | `lastWaiverGw` | **kind `w`, results `a` and `do` parsed for real**; anything else alerts |
-| Free-agency results | at the gameweek deadline | `lastFreeAgencyGw` | no confirmed shape — empty case only, anything else alerts |
+| Waiver results | window opens ~1h after the waiver deadline, stays open 22h | `lastWaiverGw` | **kind `w`, results `a`, `do` and `di` parsed for real**; anything else alerts |
+| Free-agency results | window opens at the gameweek deadline, stays open 12h | `lastFreeAgencyGw` | no confirmed shape — empty case only, anything else alerts |
 | Trade detection | every hourly tick, no window | `announcedTradeIds` | no confirmed shape — silent when quiet, new trade alerts |
 
 ### Alert once, don't throw hourly
@@ -318,6 +344,35 @@ ambiguous (it can still point at the just-finished week) — picking the wrong
 one would tag a message with the wrong gameweek number. Deadlines aren't
 ambiguous.
 
+#### The windows are hours wide on purpose — never narrow them
+
+The waiver window is `[waiverDeadline + 1h, +23h)` and the free-agency window
+is `[deadline, +12h)` (`WAIVER_WINDOW_HOURS` / `FREE_AGENCY_WINDOW_HOURS`).
+Both were 2h until GW2 2026/27, when the GW2 waiver message was **silently
+lost**: GitHub's scheduler drifted until consecutive runs were 2h40m, then
+5h13m, then **10h41m** apart — no failure, no error, nothing changed in this
+repo — and the 2h window fell entirely inside a gap.
+
+**The cron interval is not a guarantee.** GitHub documents that `schedule`
+"can be delayed during periods of high load", and gives no upper bound. The
+workflow now fires at minute 23 rather than 0 to sit outside the on-the-hour
+stampede, but that only improves the odds; the width of these windows is the
+actual safety net.
+
+Widening is free, and that is a property of the design rather than luck: the
+windows only answer "is it roughly time yet", while `lastWaiverGw` /
+`lastFreeAgencyGw` answer "have we already sent". So a wider window can only
+ever turn a *missed* message into a *late* one — never into a duplicate. A
+late waiver message is still true (it reports waivers that have processed and
+points at a deadline that hasn't passed); a missing one is a hole nobody
+notices until the group asks.
+
+The waiver window deliberately closes 1h *before* the gameweek deadline so it
+can never overlap the free-agency window that opens at it. Tests assert both
+that the two never claim the same moment, and that a run every 11h still lands
+in each window whatever the phase — that second pair fails if either width is
+put back to 2h.
+
 ⚠️ Only the `deadline_time` *field* is confirmed. Whether `bootstrap-static`
 returns `events` as a bare array or wrapped as `events.data` is not, so
 `getBootstrap` unwraps both (for `events` and `elements` alike) and throws on
@@ -375,11 +430,48 @@ re-alerts every tick until the real identifier field is confirmed.
 undocumented API. If data looks wrong, check those first. When you confirm or
 correct one, update the comment.
 
-Confirmed so far: `events[].deadline_time` (GW1 = `2026-08-21T17:30:00Z`), and
-that the transactions/trades endpoints exist and return `{transactions: []}` /
-`{trades: []}`. Still unconfirmed: the shape of a *populated* transaction or
-trade record (hence the scaffolding above), and whether `bootstrap-static`
-wraps `events` as `events.data`.
+Confirmed so far:
+
+- `/game` returns exactly six fields: `current_event`,
+  `current_event_finished`, `next_event`, `processing_status`,
+  `trades_time_for_approval`, `waivers_processed`.
+- `standings[].event_total` and `.total` — checked against all nine managers'
+  real GW1 scores.
+- `bootstrap-static` wraps **both** `events` and `elements` as `.data`; they
+  are *never* bare arrays. `getBootstrap`'s unwrap is load-bearing, not
+  defensive.
+- `events[].deadline_time` (GW1 = `2026-08-21T17:30:00Z`) and
+  `elements[].web_name` (id 1 = "Raya").
+- The transactions/trades endpoints exist and return `{transactions: []}` /
+  `{trades: []}`.
+
+Still unconfirmed: the shape of a *populated* trade record (hence the
+scaffolding above), the remaining transaction kind/result values, and
+`/entry/{id}/history`, which has never been called against the live API.
+
+### `finished` lags the final whistle — by design, not a bug
+
+The weekly report's guard is `game.finished === false`, i.e. `/game`'s
+`current_event_finished`. That flips only once **bonus points are confirmed**,
+which is hours after the last fixture ends.
+
+CONFIRMED, GW1 2026/27: with all ten fixtures played out, every one of them
+read `finished: false, finished_provisional: true`, `current_event_finished`
+was still `false`, and `standings[].event_total` was *already* populated with
+live provisional-bonus scores. The bot correctly stayed silent through every
+hourly tick in between.
+
+Waiting is the right behaviour: sending on provisional scores would put a
+number in the group chat that bonus can still move, and `lastReportedGw` would
+then suppress the corrected version — a wrong-but-plausible message. `--force`
+is the deliberate override if it is ever genuinely stuck.
+
+**Don't reach for `finished_provisional` on the event object.** A draft
+`events[]` entry is slim — `average_entry_score`, `deadline_time`, `id`,
+`name`, `finished`, `highest_scoring_entry`, `trades_time`, `waivers_time` —
+with no `finished_provisional` and no `data_checked`. Those are per-*fixture*
+fields on `/event/{gw}/fixtures` (`/fixtures` alone 404s). The `fixtures` key
+on `bootstrap-static` is neither a bare array nor `.data` and is unused.
 
 Two different IDs exist in the league payload: `league_entries[].id`
 (used by `standings[]`) and `league_entries[].entry_id` (used by `/entry/`
