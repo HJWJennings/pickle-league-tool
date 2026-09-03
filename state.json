@@ -1,7 +1,7 @@
 {
   "season": "2026/27",
   "lastReportedGw": 2,
-  "lastWaiverGw": 2,
+  "lastWaiverGw": 3,
   "lastFreeAgencyGw": null,
   "announcedTradeIds": [],
   "unrecognizedTransactionsAlerted": [
@@ -17,7 +17,8 @@
     "3805228",
     "4258142",
     "4258144",
-    "4666148"
+    "4666148",
+    "9010256"
   ],
   "managers": {
     "1931": {
